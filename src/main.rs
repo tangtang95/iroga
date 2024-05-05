@@ -40,6 +40,7 @@ struct IroHeader {
     version: i32,
     flags: IroFlags,
     size: i32,
+    num_files: u32
 }
 
 impl From<IroHeader> for Vec<u8> {
@@ -49,6 +50,7 @@ impl From<IroHeader> for Vec<u8> {
             value.version.to_le_bytes(),
             (value.flags as i32).to_le_bytes(),
             value.size.to_le_bytes(),
+            value.num_files.to_le_bytes()
         ]
         .concat()
     }
@@ -91,24 +93,26 @@ fn pack_archive(mod_name: String, dir_to_archive: PathBuf) -> Result<(), Error> 
     }
 
     let mut mod_file = std::fs::File::create(mod_name)?;
-    let iro_header = IroHeader {
-        version: MAX_VERSION,
-        flags: IroFlags::None,
-        size: 16,
-    };
-    let iro_header_bytes = Vec::from(iro_header.clone());
-    let iro_header_size = iro_header_bytes.len() as u64;
-    mod_file.write_all(iro_header_bytes.as_ref())?;
     let entries: Vec<DirEntry> = WalkDir::new(dir_to_archive)
         .into_iter()
         .filter_map(Result::ok)
         .filter(|e| !e.file_type().is_dir())
         .collect();
-    mod_file.write_all(&(entries.len() as u32).to_le_bytes())?;
 
-    let mut offset = iro_header_size + 4;
+    // IRO Header
+    let iro_header = IroHeader {
+        version: MAX_VERSION,
+        flags: IroFlags::None,
+        size: 16,
+        num_files: entries.len() as u32
+    }; 
+    let iro_header_bytes = Vec::from(iro_header.clone());
+    let iro_header_size = iro_header_bytes.len() as u64;
+    mod_file.write_all(iro_header_bytes.as_ref())?;
+
+    let mut offset = iro_header_size;
     for entry in &entries {
-        let unicode_filename: Vec<u8> = str::encode_utf16(
+        let unicode_filepath: Vec<u8> = str::encode_utf16(
             entry
                 .path()
                 .to_str()
@@ -117,7 +121,7 @@ fn pack_archive(mod_name: String, dir_to_archive: PathBuf) -> Result<(), Error> 
         .flat_map(|ch| ch.to_le_bytes())
         .collect();
 
-        offset += unicode_filename.len() as u64 + 16 + 4 // 16 + 4 is indexing entry size
+        offset += unicode_filepath.len() as u64 + 16 + 4 // 16 + 4 is indexing entry size
     }
     mod_file.seek(std::io::SeekFrom::Start(offset))?;
 
@@ -140,9 +144,9 @@ fn pack_archive(mod_name: String, dir_to_archive: PathBuf) -> Result<(), Error> 
     }
 
     // indexing data
-    mod_file.seek(std::io::SeekFrom::Start(iro_header_size + 4))?;
+    mod_file.seek(std::io::SeekFrom::Start(iro_header_size))?;
     for (entry, (pos, size)) in entries.iter().zip(positions) {
-        let unicode_filename: Vec<u8> = str::encode_utf16(
+        let unicode_filepath: Vec<u8> = str::encode_utf16(
             entry
                 .path()
                 .to_str()
@@ -151,10 +155,10 @@ fn pack_archive(mod_name: String, dir_to_archive: PathBuf) -> Result<(), Error> 
         .flat_map(|ch| ch.to_le_bytes())
         .collect();
 
-        let len: u16 = unicode_filename.len() as u16 + 4 + 16;
+        let len: u16 = unicode_filepath.len() as u16 + 4 + 16;
         mod_file.write_all(&len.to_le_bytes())?;
-        mod_file.write_all(&(unicode_filename.len().to_owned() as u16).to_le_bytes())?;
-        mod_file.write_all(&unicode_filename)?;
+        mod_file.write_all(&(unicode_filepath.len().to_owned() as u16).to_le_bytes())?;
+        mod_file.write_all(&unicode_filepath)?;
         mod_file.write_all(&0i32.to_le_bytes())?;
         mod_file.write_all(&pos.to_le_bytes())?;
         mod_file.write_all(&size.to_le_bytes())?;
