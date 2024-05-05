@@ -29,7 +29,7 @@ enum IroFlags {
     Patch = 1,
 }
 
-const IRO_SIG: i32 = 0x534f5249; //IROS in bytes
+const IRO_SIG: i32 = 0x534f5249; // represents IROS text
 
 #[allow(dead_code)]
 const MIN_VERSION: i32 = 0x10000;
@@ -78,7 +78,7 @@ fn main() {
         }
         Err(err) => {
             let stderr = std::io::stderr();
-            writeln!(stderr.lock(), "{}", err).ok();
+            writeln!(stderr.lock(), "[iropack error]: {}", err).ok();
             process::exit(1);
         }
     };
