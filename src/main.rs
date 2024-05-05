@@ -1,9 +1,12 @@
 use std::{
     io::{BufRead, BufReader, Seek, Write},
     path::PathBuf,
+    process,
+    result::Result,
 };
 
 use clap::Parser;
+use thiserror::Error;
 use walkdir::{DirEntry, WalkDir};
 
 /// Command line tool to pack a single directory into a single archive in iro format
@@ -51,21 +54,43 @@ impl From<IroHeader> for Vec<u8> {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error(transparent)]
+    Io(#[from] ::std::io::Error),
+    #[error("{0} is not a directory")]
+    NotDir(PathBuf),
+    #[error("{0} has invalid unicode")]
+    InvalidUnicode(PathBuf),
+}
+
 fn main() {
     let args = Args::parse();
-    println!("{:?}", args);
     let mod_name = match args.name {
         Some(name) => name,
         None => "mod".to_string(),
-    };
+    } + ".iro";
 
-    let dir_metadata = std::fs::metadata(&args.dir).unwrap();
+    match pack_archive(mod_name.clone(), args.dir) {
+        Ok(_) => {
+            println!("archive \"{}\" has been created!", mod_name);
+            process::exit(0);
+        }
+        Err(err) => {
+            let stderr = std::io::stderr();
+            writeln!(stderr.lock(), "{}", err).ok();
+            process::exit(1);
+        }
+    };
+}
+
+fn pack_archive(mod_name: String, dir_to_archive: PathBuf) -> Result<(), Error> {
+    let dir_metadata = std::fs::metadata(&dir_to_archive)?;
     if !dir_metadata.is_dir() {
-        println!("Given path is not a directory!");
-        return;
+        return Err(Error::NotDir(dir_to_archive));
     }
 
-    let mut mod_file = std::fs::File::create(mod_name + ".iro").unwrap();
+    let mut mod_file = std::fs::File::create(mod_name)?;
     let iro_header = IroHeader {
         version: MAX_VERSION,
         flags: IroFlags::None,
@@ -73,42 +98,41 @@ fn main() {
     };
     let iro_header_bytes = Vec::from(iro_header.clone());
     let iro_header_size = iro_header_bytes.len() as u64;
-    mod_file.write_all(iro_header_bytes.as_ref()).unwrap();
-    let entries: Vec<DirEntry> = WalkDir::new(args.dir)
+    mod_file.write_all(iro_header_bytes.as_ref())?;
+    let entries: Vec<DirEntry> = WalkDir::new(dir_to_archive)
         .into_iter()
         .filter_map(Result::ok)
         .filter(|e| !e.file_type().is_dir())
         .collect();
-    mod_file
-        .write_all(&(entries.len() as u32).to_le_bytes())
-        .unwrap();
+    mod_file.write_all(&(entries.len() as u32).to_le_bytes())?;
 
-    let entry_idx_bytes_size: u64 = entries
-        .iter()
-        .map(|e| {
-            let unicode_filename: Vec<u8> =
-                str::encode_utf16(e.to_owned().into_path().to_str().unwrap_or(""))
-                    .flat_map(|ch| ch.to_le_bytes())
-                    .collect();
-            unicode_filename.len() as u64 + 16 + 4 // 16 +4 is indexing entry size
-        })
-        .sum();
-    let mut offset: u64 = iro_header_size + 4 + entry_idx_bytes_size;
-    mod_file.seek(std::io::SeekFrom::Start(offset)).unwrap();
+    let mut offset = iro_header_size + 4;
+    for entry in &entries {
+        let unicode_filename: Vec<u8> = str::encode_utf16(
+            entry
+                .path()
+                .to_str()
+                .ok_or(Error::InvalidUnicode(entry.path().to_owned()))?,
+        )
+        .flat_map(|ch| ch.to_le_bytes())
+        .collect();
+
+        offset += unicode_filename.len() as u64 + 16 + 4 // 16 + 4 is indexing entry size
+    }
+    mod_file.seek(std::io::SeekFrom::Start(offset))?;
 
     let mut positions: Vec<(u64, i32)> = Vec::with_capacity(entries.len());
     for entry in &entries {
-        println!("{:?}", entry);
-        let file = std::fs::File::open(entry.to_owned().into_path()).unwrap();
+        let file = std::fs::File::open(entry.to_owned().into_path())?;
         let entry_offset = offset;
         let mut reader = BufReader::new(file);
         loop {
-            let bytes = reader.fill_buf().unwrap();
+            let bytes = reader.fill_buf()?;
             let consumed = bytes.len();
             if consumed == 0 {
                 break;
             }
-            mod_file.write_all(bytes).unwrap();
+            mod_file.write_all(bytes)?;
             reader.consume(consumed);
             offset += consumed as u64;
         }
@@ -116,22 +140,25 @@ fn main() {
     }
 
     // indexing data
-    mod_file
-        .seek(std::io::SeekFrom::Start(iro_header_size + 4))
-        .unwrap();
+    mod_file.seek(std::io::SeekFrom::Start(iro_header_size + 4))?;
     for (entry, (pos, size)) in entries.iter().zip(positions) {
-        let unicode_filename: Vec<u8> =
-            str::encode_utf16(entry.to_owned().into_path().to_str().unwrap_or(""))
-                .flat_map(|ch| ch.to_le_bytes())
-                .collect();
+        let unicode_filename: Vec<u8> = str::encode_utf16(
+            entry
+                .path()
+                .to_str()
+                .ok_or(Error::InvalidUnicode(entry.path().to_owned()))?,
+        )
+        .flat_map(|ch| ch.to_le_bytes())
+        .collect();
+
         let len: u16 = unicode_filename.len() as u16 + 4 + 16;
-        mod_file.write_all(&len.to_le_bytes()).unwrap();
-        mod_file
-            .write_all(&(unicode_filename.len().to_owned() as u16).to_le_bytes())
-            .unwrap();
-        mod_file.write_all(&unicode_filename).unwrap();
-        mod_file.write_all(&0i32.to_le_bytes()).unwrap();
-        mod_file.write_all(&pos.to_le_bytes()).unwrap();
-        mod_file.write_all(&size.to_le_bytes()).unwrap();
+        mod_file.write_all(&len.to_le_bytes())?;
+        mod_file.write_all(&(unicode_filename.len().to_owned() as u16).to_le_bytes())?;
+        mod_file.write_all(&unicode_filename)?;
+        mod_file.write_all(&0i32.to_le_bytes())?;
+        mod_file.write_all(&pos.to_le_bytes())?;
+        mod_file.write_all(&size.to_le_bytes())?;
     }
+
+    Ok(())
 }
