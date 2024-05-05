@@ -1,8 +1,8 @@
 use std::{
     io::{BufRead, BufReader, Seek, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process,
-    result::Result,
+    result::Result
 };
 
 use clap::Parser;
@@ -40,7 +40,7 @@ struct IroHeader {
     version: i32,
     flags: IroFlags,
     size: i32,
-    num_files: u32
+    num_files: u32,
 }
 
 impl From<IroHeader> for Vec<u8> {
@@ -50,7 +50,7 @@ impl From<IroHeader> for Vec<u8> {
             value.version.to_le_bytes(),
             (value.flags as i32).to_le_bytes(),
             value.size.to_le_bytes(),
-            value.num_files.to_le_bytes()
+            value.num_files.to_le_bytes(),
         ]
         .concat()
     }
@@ -60,6 +60,8 @@ impl From<IroHeader> for Vec<u8> {
 pub enum Error {
     #[error(transparent)]
     Io(#[from] ::std::io::Error),
+    #[error(transparent)]
+    StripPrefix(#[from] ::std::path::StripPrefixError),
     #[error("{0} is not a directory")]
     NotDir(PathBuf),
     #[error("{0} has invalid unicode")]
@@ -92,35 +94,29 @@ fn pack_archive(mod_name: String, dir_to_archive: PathBuf) -> Result<(), Error> 
         return Err(Error::NotDir(dir_to_archive));
     }
 
-    let mut mod_file = std::fs::File::create(mod_name)?;
-    let entries: Vec<DirEntry> = WalkDir::new(dir_to_archive)
+    // Remove mod file first to avoid including it in the archive
+    std::fs::remove_file(&mod_name).ok();
+    let entries: Vec<DirEntry> = WalkDir::new(&dir_to_archive)
         .into_iter()
         .filter_map(Result::ok)
         .filter(|e| !e.file_type().is_dir())
         .collect();
+    let mut mod_file = std::fs::File::create(mod_name)?;
 
     // IRO Header
     let iro_header = IroHeader {
         version: MAX_VERSION,
         flags: IroFlags::None,
         size: 16,
-        num_files: entries.len() as u32
-    }; 
+        num_files: entries.len() as u32,
+    };
     let iro_header_bytes = Vec::from(iro_header.clone());
     let iro_header_size = iro_header_bytes.len() as u64;
     mod_file.write_all(iro_header_bytes.as_ref())?;
 
     let mut offset = iro_header_size;
     for entry in &entries {
-        let unicode_filepath: Vec<u8> = str::encode_utf16(
-            entry
-                .path()
-                .to_str()
-                .ok_or(Error::InvalidUnicode(entry.path().to_owned()))?,
-        )
-        .flat_map(|ch| ch.to_le_bytes())
-        .collect();
-
+        let unicode_filepath: Vec<u8> = unicode_filepath_bytes(entry.path(), dir_to_archive.as_path())?;
         offset += unicode_filepath.len() as u64 + 16 + 4 // 16 + 4 is indexing entry size
     }
     mod_file.seek(std::io::SeekFrom::Start(offset))?;
@@ -146,15 +142,7 @@ fn pack_archive(mod_name: String, dir_to_archive: PathBuf) -> Result<(), Error> 
     // indexing data
     mod_file.seek(std::io::SeekFrom::Start(iro_header_size))?;
     for (entry, (pos, size)) in entries.iter().zip(positions) {
-        let unicode_filepath: Vec<u8> = str::encode_utf16(
-            entry
-                .path()
-                .to_str()
-                .ok_or(Error::InvalidUnicode(entry.path().to_owned()))?,
-        )
-        .flat_map(|ch| ch.to_le_bytes())
-        .collect();
-
+        let unicode_filepath: Vec<u8> = unicode_filepath_bytes(entry.path(), dir_to_archive.as_path())?;
         let len: u16 = unicode_filepath.len() as u16 + 4 + 16;
         mod_file.write_all(&len.to_le_bytes())?;
         mod_file.write_all(&(unicode_filepath.len().to_owned() as u16).to_le_bytes())?;
@@ -165,4 +153,13 @@ fn pack_archive(mod_name: String, dir_to_archive: PathBuf) -> Result<(), Error> 
     }
 
     Ok(())
+}
+
+fn unicode_filepath_bytes(path: &Path, strip_prefix_str: &Path) -> Result<Vec<u8>, Error> {
+    Ok(path.strip_prefix(strip_prefix_str)?
+        .to_str()
+        .ok_or(Error::InvalidUnicode(path.to_owned()))?
+        .encode_utf16()
+        .flat_map(|ch| ch.to_le_bytes())
+        .collect())
 }
