@@ -34,8 +34,8 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - run: cargo build --release
-      - run: cargo test
+      - run: cargo build --locked --release
+      - run: cargo test --locked --release
       - name: Upload app
         uses: actions/upload-artifact@v4
         with:

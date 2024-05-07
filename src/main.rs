@@ -2,7 +2,7 @@ use std::{
     io::{BufRead, BufReader, Seek, Write},
     path::{Path, PathBuf},
     process,
-    result::Result
+    result::Result,
 };
 
 use clap::Parser;
@@ -96,11 +96,15 @@ fn pack_archive(mod_name: String, dir_to_archive: PathBuf) -> Result<(), Error> 
 
     // Remove mod file first to avoid including it in the archive
     std::fs::remove_file(&mod_name).ok();
-    let entries: Vec<DirEntry> = WalkDir::new(&dir_to_archive)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|e| !e.file_type().is_dir())
-        .collect();
+    let entries: Vec<DirEntry> = {
+        let mut entries: Vec<DirEntry> = WalkDir::new(&dir_to_archive)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|e| !e.file_type().is_dir())
+            .collect();
+        entries.sort_by(|a, b| a.path().partial_cmp(b.path()).unwrap());
+        entries
+    };
     let mut mod_file = std::fs::File::create(mod_name)?;
 
     // IRO Header
@@ -116,7 +120,8 @@ fn pack_archive(mod_name: String, dir_to_archive: PathBuf) -> Result<(), Error> 
 
     let mut offset = iro_header_size;
     for entry in &entries {
-        let unicode_filepath: Vec<u8> = unicode_filepath_bytes(entry.path(), dir_to_archive.as_path())?;
+        let unicode_filepath: Vec<u8> =
+            unicode_filepath_bytes(entry.path(), dir_to_archive.as_path())?;
         offset += unicode_filepath.len() as u64 + 16 + 4 // 16 + 4 is indexing entry size
     }
     mod_file.seek(std::io::SeekFrom::Start(offset))?;
@@ -142,7 +147,8 @@ fn pack_archive(mod_name: String, dir_to_archive: PathBuf) -> Result<(), Error> 
     // indexing data
     mod_file.seek(std::io::SeekFrom::Start(iro_header_size))?;
     for (entry, (pos, size)) in entries.iter().zip(positions) {
-        let unicode_filepath: Vec<u8> = unicode_filepath_bytes(entry.path(), dir_to_archive.as_path())?;
+        let unicode_filepath: Vec<u8> =
+            unicode_filepath_bytes(entry.path(), dir_to_archive.as_path())?;
         let len: u16 = unicode_filepath.len() as u16 + 4 + 16;
         mod_file.write_all(&len.to_le_bytes())?;
         mod_file.write_all(&(unicode_filepath.len().to_owned() as u16).to_le_bytes())?;
@@ -156,7 +162,8 @@ fn pack_archive(mod_name: String, dir_to_archive: PathBuf) -> Result<(), Error> 
 }
 
 fn unicode_filepath_bytes(path: &Path, strip_prefix_str: &Path) -> Result<Vec<u8>, Error> {
-    Ok(path.strip_prefix(strip_prefix_str)?
+    Ok(path
+        .strip_prefix(strip_prefix_str)?
         .to_str()
         .ok_or(Error::InvalidUnicode(path.to_owned()))?
         .replace('/', "\\")
