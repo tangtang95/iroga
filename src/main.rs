@@ -96,15 +96,12 @@ fn pack_archive(mod_name: String, dir_to_archive: PathBuf) -> Result<(), Error> 
 
     // Remove mod file first to avoid including it in the archive
     std::fs::remove_file(&mod_name).ok();
-    let entries: Vec<DirEntry> = {
-        let mut entries: Vec<DirEntry> = WalkDir::new(&dir_to_archive)
-            .into_iter()
-            .filter_map(Result::ok)
-            .filter(|e| !e.file_type().is_dir())
-            .collect();
-        entries.sort_by(|a, b| a.path().partial_cmp(b.path()).unwrap());
-        entries
-    };
+    let entries: Vec<DirEntry> = WalkDir::new(&dir_to_archive)
+        .sort_by_file_name()
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| !e.file_type().is_dir())
+        .collect();
     let mut mod_file = std::fs::File::create(mod_name)?;
 
     // IRO Header
