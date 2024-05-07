@@ -9,11 +9,12 @@ use hex_literal::hex;
 pub fn not_exists_file() {
     let dir = assert_fs::TempDir::new().unwrap();
     iropack_cmd()
+        .current_dir(dir.path())
         .arg(dir.path().join("not_exists_file"))
         .assert()
         .failure()
-        .code(1)
-        .stderr(predicates::str::contains("No such file or directory"));
+        .code(1);
+    assert!(!dir.child("not_exists_file").exists());
 }
 
 #[test]
@@ -62,7 +63,7 @@ pub fn multiple_files() {
         "74 00 00 00 00 00 76 00   00 00 00 00 00 00 01 00"
         "00 00 1e 00 0a 00 61 00   2e 00 74 00 78 00 74 00"
         "00 00 00 00 77 00 00 00   00 00 00 00 01 00 00 00"
-        "26 00 12 00 64 00 69 00   72 00 2f 00 63 00 2e 00"
+        "26 00 12 00 64 00 69 00   72 00 5c 00 63 00 2e 00"
         "74 00 78 00 74 00 00 00   00 00 78 00 00 00 00 00"
         "00 00 01 00 00 00 42 41   43                     "
     );

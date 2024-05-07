@@ -159,6 +159,7 @@ fn unicode_filepath_bytes(path: &Path, strip_prefix_str: &Path) -> Result<Vec<u8
     Ok(path.strip_prefix(strip_prefix_str)?
         .to_str()
         .ok_or(Error::InvalidUnicode(path.to_owned()))?
+        .replace('/', "\\")
         .encode_utf16()
         .flat_map(|ch| ch.to_le_bytes())
         .collect())
