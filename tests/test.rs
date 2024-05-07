@@ -35,7 +35,7 @@ pub fn single_file() {
         "01 00 00 00 24 00 10 00   66 00 69 00 6c 00 65 00"
         "2e 00 74 00 78 00 74 00   00 00 00 00 38 00 00 00"
         "00 00 00 00 17 00 00 00   48 65 6c 6c 6f 20 57 6f"
-        "72 6c 64 21 0d 0a 0d 0a   48 69 21 0d 0a 0d 0a"
+        "72 6c 64 21 0d 0a 0d 0a   48 69 21 0d 0a 0d 0a   "
     );
     let dir = assert_fs::TempDir::new().unwrap();
     dir.child("single/file.txt")
@@ -45,6 +45,35 @@ pub fn single_file() {
     iropack_cmd()
         .current_dir(dir.path())
         .arg(dir.path().join("single"))
+        .assert()
+        .success()
+        .code(0);
+
+    assert!(dir.child("mod.iro").exists());
+    dir.child("mod.iro").assert(EXPECTED_BYTES);
+    dir.close().unwrap();
+}
+
+#[test]
+pub fn multiple_files() {
+    const EXPECTED_BYTES: &[u8] = &hex!(
+        "49 52 4f 53 02 00 01 00   00 00 00 00 10 00 00 00"
+        "03 00 00 00 1e 00 0a 00   62 00 2e 00 74 00 78 00"
+        "74 00 00 00 00 00 76 00   00 00 00 00 00 00 01 00"
+        "00 00 1e 00 0a 00 61 00   2e 00 74 00 78 00 74 00"
+        "00 00 00 00 77 00 00 00   00 00 00 00 01 00 00 00"
+        "26 00 12 00 64 00 69 00   72 00 2f 00 63 00 2e 00"
+        "74 00 78 00 74 00 00 00   00 00 78 00 00 00 00 00"
+        "00 00 01 00 00 00 42 41   43                     "
+    );
+    let dir = assert_fs::TempDir::new().unwrap();
+    dir.child("multiple/a.txt").write_str("A").unwrap();
+    dir.child("multiple/b.txt").write_str("B").unwrap();
+    dir.child("multiple/dir/c.txt").write_str("C").unwrap();
+
+    iropack_cmd()
+        .current_dir(dir.path())
+        .arg(dir.path().join("multiple"))
         .assert()
         .success()
         .code(0);
