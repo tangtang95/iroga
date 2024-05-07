@@ -30,7 +30,7 @@ pub fn not_dir() {
 
 #[test]
 pub fn single_file() {
-    const EXPECTED_BYTES_SINGLE_FILE: &[u8] = &hex!(
+    const EXPECTED_BYTES: &[u8] = &hex!(
         "49 52 4f 53 02 00 01 00   00 00 00 00 10 00 00 00"
         "01 00 00 00 24 00 10 00   66 00 69 00 6c 00 65 00"
         "2e 00 74 00 78 00 74 00   00 00 00 00 38 00 00 00"
@@ -50,7 +50,7 @@ pub fn single_file() {
         .code(0);
 
     assert!(dir.child("mod.iro").exists());
-    dir.child("mod.iro").assert(EXPECTED_BYTES_SINGLE_FILE);
+    dir.child("mod.iro").assert(EXPECTED_BYTES);
     dir.close().unwrap();
 }
 
