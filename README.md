@@ -1,3 +1,4 @@
+[![CI](https://github.com/tangtang95/iropack-rs/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/tangtang95/iropack-rs/actions/workflows/ci.yaml)
 # Iropack
 
 Command line application to pack a single directory into an iro archive.
