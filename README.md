@@ -6,10 +6,10 @@ The iro archive is a format used in [7th heaven](https://github.com/tsunamods-co
 ## Usage
 
 ```sh
-iropack directory --name modname
+iropack-rs directory --name modname
 
 # For help information
-iropack --help
+iropack-rs --help
 ```
 
 ## IRO format
