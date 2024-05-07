@@ -1,0 +1,59 @@
+use assert_cmd::Command;
+use assert_fs::{
+    assert::PathAssert,
+    fixture::{FileTouch, FileWriteStr, PathChild},
+};
+use hex_literal::hex;
+
+#[test]
+pub fn not_exists_file() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    iropack_cmd()
+        .arg(dir.path().join("not_exists_file"))
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicates::str::contains("No such file or directory"));
+}
+
+#[test]
+pub fn not_dir() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    dir.child("not_dir").touch().unwrap();
+    iropack_cmd()
+        .arg(dir.path().join("not_dir"))
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicates::str::contains("not a directory"));
+}
+
+#[test]
+pub fn single_file() {
+    const EXPECTED_BYTES_SINGLE_FILE: &[u8] = &hex!(
+        "49 52 4f 53 02 00 01 00   00 00 00 00 10 00 00 00"
+        "01 00 00 00 24 00 10 00   66 00 69 00 6c 00 65 00"
+        "2e 00 74 00 78 00 74 00   00 00 00 00 38 00 00 00"
+        "00 00 00 00 17 00 00 00   48 65 6c 6c 6f 20 57 6f"
+        "72 6c 64 21 0d 0a 0d 0a   48 69 21 0d 0a 0d 0a"
+    );
+    let dir = assert_fs::TempDir::new().unwrap();
+    dir.child("single/file.txt")
+        .write_str("Hello World!\r\n\r\nHi!\r\n\r\n")
+        .unwrap();
+
+    iropack_cmd()
+        .current_dir(dir.path())
+        .arg(dir.path().join("single"))
+        .assert()
+        .success()
+        .code(0);
+
+    assert!(dir.child("mod.iro").exists());
+    dir.child("mod.iro").assert(EXPECTED_BYTES_SINGLE_FILE);
+    dir.close().unwrap();
+}
+
+fn iropack_cmd() -> Command {
+    Command::cargo_bin("iropack-rs").unwrap()
+}
