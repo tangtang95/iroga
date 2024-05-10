@@ -10,6 +10,7 @@ pub fn not_exists_file() {
     let dir = assert_fs::TempDir::new().unwrap();
     iropack_cmd()
         .current_dir(dir.path())
+        .arg("pack")
         .arg(dir.path().join("not_exists_file"))
         .assert()
         .failure()
@@ -22,6 +23,7 @@ pub fn not_dir() {
     let dir = assert_fs::TempDir::new().unwrap();
     dir.child("not_dir").touch().unwrap();
     iropack_cmd()
+        .arg("pack")
         .arg(dir.path().join("not_dir"))
         .assert()
         .failure()
@@ -45,13 +47,14 @@ pub fn single_file() {
 
     iropack_cmd()
         .current_dir(dir.path())
+        .arg("pack")
         .arg(dir.path().join("single"))
         .assert()
         .success()
         .code(0);
 
-    assert!(dir.child("mod.iro").exists());
-    dir.child("mod.iro").assert(EXPECTED_BYTES);
+    assert!(dir.child("single.iro").exists());
+    dir.child("single.iro").assert(EXPECTED_BYTES);
     dir.close().unwrap();
 }
 
@@ -74,13 +77,14 @@ pub fn multiple_files() {
 
     iropack_cmd()
         .current_dir(dir.path())
+        .arg("pack")
         .arg(dir.path().join("multiple"))
         .assert()
         .success()
         .code(0);
 
-    assert!(dir.child("mod.iro").exists());
-    dir.child("mod.iro").assert(EXPECTED_BYTES);
+    assert!(dir.child("multiple.iro").exists());
+    dir.child("multiple.iro").assert(EXPECTED_BYTES);
     dir.close().unwrap();
 }
 

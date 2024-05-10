@@ -1,32 +1,38 @@
 use std::{
+    ffi::OsString,
     io::{BufRead, BufReader, Seek, Write},
     path::{Path, PathBuf},
     process,
     result::Result,
 };
 
-use clap::Parser;
+use clap::{Args, Parser, Subcommand};
 use thiserror::Error;
 use walkdir::{DirEntry, WalkDir};
 
-/// Command line tool to pack a single directory into a single archive in iro format
-#[derive(Parser, Debug)]
+/// Command line tool to pack a single directory into a single archive in IRO format
+#[derive(Parser)]
 #[command(version, about, long_about = None)]
-struct Args {
-    /// Directory to pack into iro
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Pack a single directory into an IRO archive
+    Pack(PackArgs),
+}
+
+#[derive(Args)]
+struct PackArgs {
+    /// Directory to pack
     #[arg()]
     dir: PathBuf,
 
     /// Name of the file (default name: "mod")
     #[arg(short, long)]
-    name: Option<String>,
-}
-
-#[derive(Clone)]
-#[allow(dead_code)]
-enum IroFlags {
-    None = 0,
-    Patch = 1,
+    output: Option<PathBuf>,
 }
 
 const IRO_SIG: i32 = 0x534f5249; // represents IROS text
@@ -41,6 +47,13 @@ struct IroHeader {
     flags: IroFlags,
     size: i32,
     num_files: u32,
+}
+
+#[derive(Clone)]
+#[allow(dead_code)]
+enum IroFlags {
+    None = 0,
+    Patch = 1,
 }
 
 impl From<IroHeader> for Vec<u8> {
@@ -66,43 +79,54 @@ pub enum Error {
     NotDir(PathBuf),
     #[error("{0} has invalid unicode")]
     InvalidUnicode(PathBuf),
+    #[error("could not find default name from {0}")]
+    CannotDetectDefaultName(PathBuf),
 }
 
 fn main() {
-    let args = Args::parse();
-    let mod_name = match args.name {
-        Some(name) => name,
-        None => "mod".to_string(),
-    } + ".iro";
-
-    match pack_archive(mod_name.clone(), args.dir) {
-        Ok(_) => {
-            println!("archive \"{}\" has been created!", mod_name);
-            process::exit(0);
-        }
-        Err(err) => {
-            let stderr = std::io::stderr();
-            writeln!(stderr.lock(), "[iropack error]: {}", err).ok();
-            process::exit(1);
-        }
-    };
+    let cli = Cli::parse();
+    match cli.command {
+        Commands::Pack(args) => match pack_archive(args.dir, args.output) {
+            Ok(output_filename) => {
+                println!("archive \"{:?}\" has been created!", output_filename);
+                process::exit(0);
+            }
+            Err(err) => {
+                let stderr = std::io::stderr();
+                writeln!(stderr.lock(), "[iropack error]: {}", err).ok();
+                process::exit(1);
+            }
+        },
+    }
 }
 
-fn pack_archive(mod_name: String, dir_to_archive: PathBuf) -> Result<(), Error> {
-    let dir_metadata = std::fs::metadata(&dir_to_archive)?;
+fn pack_archive(dir_to_pack: PathBuf, output_path: Option<PathBuf>) -> Result<OsString, Error> {
+    let dir_metadata = std::fs::metadata(&dir_to_pack)?;
     if !dir_metadata.is_dir() {
-        return Err(Error::NotDir(dir_to_archive));
+        return Err(Error::NotDir(dir_to_pack));
     }
+    let output_path = match output_path {
+        Some(path) => path.as_os_str().to_owned(),
+        None => {
+            let abs_path = std::fs::canonicalize(&dir_to_pack)?;
+            let mut filename = abs_path
+                .file_name()
+                .ok_or(Error::CannotDetectDefaultName(abs_path.clone()))?
+                .to_owned();
+            filename.push(".iro");
+            filename
+        }
+    };
 
     // Remove mod file first to avoid including it in the archive
-    std::fs::remove_file(&mod_name).ok();
-    let entries: Vec<DirEntry> = WalkDir::new(&dir_to_archive)
+    std::fs::remove_file(&output_path).ok();
+    let entries: Vec<DirEntry> = WalkDir::new(&dir_to_pack)
         .sort_by_file_name()
         .into_iter()
         .filter_map(Result::ok)
         .filter(|e| !e.file_type().is_dir())
         .collect();
-    let mut mod_file = std::fs::File::create(mod_name)?;
+    let mut mod_file = std::fs::File::create(&output_path)?;
 
     // IRO Header
     let iro_header = IroHeader {
@@ -118,7 +142,7 @@ fn pack_archive(mod_name: String, dir_to_archive: PathBuf) -> Result<(), Error> 
     let mut offset = iro_header_size;
     for entry in &entries {
         let unicode_filepath: Vec<u8> =
-            unicode_filepath_bytes(entry.path(), dir_to_archive.as_path())?;
+            unicode_filepath_bytes(entry.path(), dir_to_pack.as_path())?;
         offset += unicode_filepath.len() as u64 + 16 + 4 // 16 + 4 is indexing entry size
     }
     mod_file.seek(std::io::SeekFrom::Start(offset))?;
@@ -145,7 +169,7 @@ fn pack_archive(mod_name: String, dir_to_archive: PathBuf) -> Result<(), Error> 
     mod_file.seek(std::io::SeekFrom::Start(iro_header_size))?;
     for (entry, (pos, size)) in entries.iter().zip(positions) {
         let unicode_filepath: Vec<u8> =
-            unicode_filepath_bytes(entry.path(), dir_to_archive.as_path())?;
+            unicode_filepath_bytes(entry.path(), dir_to_pack.as_path())?;
         let len: u16 = unicode_filepath.len() as u16 + 4 + 16;
         mod_file.write_all(&len.to_le_bytes())?;
         mod_file.write_all(&(unicode_filepath.len().to_owned() as u16).to_le_bytes())?;
@@ -155,7 +179,7 @@ fn pack_archive(mod_name: String, dir_to_archive: PathBuf) -> Result<(), Error> 
         mod_file.write_all(&size.to_le_bytes())?;
     }
 
-    Ok(())
+    Ok(output_path)
 }
 
 fn unicode_filepath_bytes(path: &Path, strip_prefix_str: &Path) -> Result<Vec<u8>, Error> {
