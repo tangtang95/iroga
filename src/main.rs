@@ -122,7 +122,7 @@ fn pack_archive(dir_to_pack: PathBuf, output_path: Option<PathBuf>) -> Result<Pa
     };
 
     // Do not create IRO archive if the output path already points to an existing file
-    if Path::try_exists(&output_path).is_err() {
+    if std::fs::File::open(&output_path).is_ok() {
         return Err(Error::OutputPathExists(output_path));
     }
 

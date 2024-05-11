@@ -32,6 +32,21 @@ pub fn not_dir() {
 }
 
 #[test]
+pub fn output_file_already_exists() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    dir.child("dir/file.txt").touch().unwrap();
+    dir.child("dir.iro").touch().unwrap();
+    iropack_cmd()
+        .current_dir(dir.path())
+        .arg("pack")
+        .arg("dir")
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicates::str::contains("output file path already exists"));
+}
+
+#[test]
 pub fn single_file() {
     const EXPECTED_BYTES: &[u8] = &hex!(
         "49 52 4f 53 02 00 01 00   00 00 00 00 10 00 00 00"
