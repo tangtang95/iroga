@@ -4,7 +4,7 @@ on: [push]
 
 env:
   RUST_VERSION: stable
-  APP_NAME: iropack-rs
+  APP_NAME: iroga
 
 jobs:
   build:
@@ -14,10 +14,10 @@ jobs:
         include:
           - os: ubuntu-latest
             triplet: x86_64-unknown-linux-gnu
-            artifact: iropack-rs
+            artifact: iroga
           - os: windows-latest
             triplet: x86_64-pc-windows-msvc
-            artifact: iropack-rs.exe
+            artifact: iroga.exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
