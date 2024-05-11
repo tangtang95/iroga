@@ -1,5 +1,11 @@
 [package]
 name = "iroga"
+description = "Command line app to pack a single directory into an IRO archive (FF7 mod manager format)"
+repository = "https://github.com/tangtang95/iroga"
+authors = ["Tangtang Zhou <tangtang2995@gmail.com>"]
+categories = ["command-line-utilities"]
+keywords = ["cli", "iro", "archive"]
+license = "MIT"
 version = "0.1.0"
 edition = "2021"
 
