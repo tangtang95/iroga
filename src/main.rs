@@ -1,5 +1,4 @@
 use std::{
-    ffi::OsString,
     io::{BufRead, BufReader, Seek, Write},
     path::{Path, PathBuf},
     process,
@@ -30,7 +29,7 @@ struct PackArgs {
     #[arg()]
     dir: PathBuf,
 
-    /// Name of the file (default name: "mod")
+    /// Output file path (default is the name of the dir to pack)
     #[arg(short, long)]
     output: Option<PathBuf>,
 }
@@ -77,6 +76,8 @@ pub enum Error {
     StripPrefix(#[from] ::std::path::StripPrefixError),
     #[error("{0} is not a directory")]
     NotDir(PathBuf),
+    #[error("output file path already exists: {0}")]
+    OutputPathExists(PathBuf),
     #[error("{0} has invalid unicode")]
     InvalidUnicode(PathBuf),
     #[error("could not find default name from {0}")]
@@ -88,7 +89,7 @@ fn main() {
     match cli.command {
         Commands::Pack(args) => match pack_archive(args.dir, args.output) {
             Ok(output_filename) => {
-                println!("archive \"{:?}\" has been created!", output_filename);
+                println!("archive \"{}\" has been created!", output_filename.display());
                 process::exit(0);
             }
             Err(err) => {
@@ -100,13 +101,15 @@ fn main() {
     }
 }
 
-fn pack_archive(dir_to_pack: PathBuf, output_path: Option<PathBuf>) -> Result<OsString, Error> {
+fn pack_archive(dir_to_pack: PathBuf, output_path: Option<PathBuf>) -> Result<PathBuf, Error> {
     let dir_metadata = std::fs::metadata(&dir_to_pack)?;
     if !dir_metadata.is_dir() {
         return Err(Error::NotDir(dir_to_pack));
     }
+
+    // compute output filepath: either default generated name or given output_path
     let output_path = match output_path {
-        Some(path) => path.as_os_str().to_owned(),
+        Some(path) => path,
         None => {
             let abs_path = std::fs::canonicalize(&dir_to_pack)?;
             let mut filename = abs_path
@@ -114,12 +117,15 @@ fn pack_archive(dir_to_pack: PathBuf, output_path: Option<PathBuf>) -> Result<Os
                 .ok_or(Error::CannotDetectDefaultName(abs_path.clone()))?
                 .to_owned();
             filename.push(".iro");
-            filename
+            Path::new(&filename).to_owned()
         }
     };
 
-    // Remove mod file first to avoid including it in the archive
-    std::fs::remove_file(&output_path).ok();
+    // Do not create IRO archive if the output path already points to an existing file
+    if Path::try_exists(&output_path).is_err() {
+        return Err(Error::OutputPathExists(output_path));
+    }
+
     let entries: Vec<DirEntry> = WalkDir::new(&dir_to_pack)
         .sort_by_file_name()
         .into_iter()
