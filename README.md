@@ -1,17 +1,17 @@
-[![CI](https://github.com/tangtang95/iropack-rs/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/tangtang95/iropack-rs/actions/workflows/ci.yaml)
-# Iropack
+[![CI](https://github.com/tangtang95/iroga/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/tangtang95/iroga/actions/workflows/ci.yaml)
+# Iroga
 
-Command line application to pack a single directory into an iro archive.
-The iro archive is a format used in [7th heaven](https://github.com/tsunamods-codes/7th-Heaven), a FF7 mod manager application
+Command line application to pack a single directory into an IRO archive.
+The IRO archive is a format used in [7th heaven](https://github.com/tsunamods-codes/7th-Heaven), a FF7 mod manager application
 
 ## Usage
 
 ```sh
 # Simple usage
-iropack-rs pack <DIR>
+iroga pack <DIR>
 
 # For help information
-iropack-rs --help
+iroga --help
 ```
 
 ## IRO format

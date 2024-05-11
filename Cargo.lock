@@ -280,7 +280,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "iropack-rs"
+name = "iroga"
 version = "0.1.0"
 dependencies = [
  "assert_cmd",

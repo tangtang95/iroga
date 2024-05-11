@@ -8,7 +8,7 @@ use hex_literal::hex;
 #[test]
 pub fn not_exists_file() {
     let dir = assert_fs::TempDir::new().unwrap();
-    iropack_cmd()
+    iroga_cmd()
         .current_dir(dir.path())
         .arg("pack")
         .arg(dir.path().join("not_exists_file"))
@@ -22,7 +22,7 @@ pub fn not_exists_file() {
 pub fn not_dir() {
     let dir = assert_fs::TempDir::new().unwrap();
     dir.child("not_dir").touch().unwrap();
-    iropack_cmd()
+    iroga_cmd()
         .arg("pack")
         .arg(dir.path().join("not_dir"))
         .assert()
@@ -36,7 +36,7 @@ pub fn output_file_already_exists() {
     let dir = assert_fs::TempDir::new().unwrap();
     dir.child("dir/file.txt").touch().unwrap();
     dir.child("dir.iro").touch().unwrap();
-    iropack_cmd()
+    iroga_cmd()
         .current_dir(dir.path())
         .arg("pack")
         .arg("dir")
@@ -60,7 +60,7 @@ pub fn single_file() {
         .write_str("Hello World!\r\n\r\nHi!\r\n\r\n")
         .unwrap();
 
-    iropack_cmd()
+    iroga_cmd()
         .current_dir(dir.path())
         .arg("pack")
         .arg(dir.path().join("single"))
@@ -90,7 +90,7 @@ pub fn multiple_files() {
     dir.child("multiple/b.txt").write_str("B").unwrap();
     dir.child("multiple/dir/c.txt").write_str("C").unwrap();
 
-    iropack_cmd()
+    iroga_cmd()
         .current_dir(dir.path())
         .arg("pack")
         .arg(dir.path().join("multiple"))
@@ -103,6 +103,6 @@ pub fn multiple_files() {
     dir.close().unwrap();
 }
 
-fn iropack_cmd() -> Command {
-    Command::cargo_bin("iropack-rs").unwrap()
+fn iroga_cmd() -> Command {
+    Command::cargo_bin("iroga").unwrap()
 }
