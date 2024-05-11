@@ -94,7 +94,7 @@ fn main() {
             }
             Err(err) => {
                 let stderr = std::io::stderr();
-                writeln!(stderr.lock(), "[iropack error]: {}", err).ok();
+                writeln!(stderr.lock(), "[iroga error]: {}", err).ok();
                 process::exit(1);
             }
         },
