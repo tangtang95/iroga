@@ -6,8 +6,11 @@ use std::{
 };
 
 use clap::{Args, Parser, Subcommand};
+use iro_header::{IroFlags, IroHeader, IroVersion};
 use thiserror::Error;
 use walkdir::{DirEntry, WalkDir};
+
+mod iro_header;
 
 /// Command line tool to pack a single directory into a single archive in IRO format
 #[derive(Parser)]
@@ -34,40 +37,6 @@ struct PackArgs {
     output: Option<PathBuf>,
 }
 
-const IRO_SIG: i32 = 0x534f5249; // represents IROS text
-
-#[allow(dead_code)]
-const MIN_VERSION: i32 = 0x10000;
-const MAX_VERSION: i32 = 0x10002;
-
-#[derive(Clone)]
-struct IroHeader {
-    version: i32,
-    flags: IroFlags,
-    size: i32,
-    num_files: u32,
-}
-
-#[derive(Clone)]
-#[allow(dead_code)]
-enum IroFlags {
-    None = 0,
-    Patch = 1,
-}
-
-impl From<IroHeader> for Vec<u8> {
-    fn from(value: IroHeader) -> Self {
-        [
-            IRO_SIG.to_le_bytes(),
-            value.version.to_le_bytes(),
-            (value.flags as i32).to_le_bytes(),
-            value.size.to_le_bytes(),
-            value.num_files.to_le_bytes(),
-        ]
-        .concat()
-    }
-}
-
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
@@ -89,7 +58,10 @@ fn main() {
     match cli.command {
         Commands::Pack(args) => match pack_archive(args.dir, args.output) {
             Ok(output_filename) => {
-                println!("archive \"{}\" has been created!", output_filename.display());
+                println!(
+                    "archive \"{}\" has been created!",
+                    output_filename.display()
+                );
                 process::exit(0);
             }
             Err(err) => {
@@ -135,12 +107,7 @@ fn pack_archive(dir_to_pack: PathBuf, output_path: Option<PathBuf>) -> Result<Pa
     let mut mod_file = std::fs::File::create(&output_path)?;
 
     // IRO Header
-    let iro_header = IroHeader {
-        version: MAX_VERSION,
-        flags: IroFlags::None,
-        size: 16,
-        num_files: entries.len() as u32,
-    };
+    let iro_header = IroHeader::new(IroVersion::Two, IroFlags::None, 16, entries.len() as u32);
     let iro_header_bytes = Vec::from(iro_header.clone());
     let iro_header_size = iro_header_bytes.len() as u64;
     mod_file.write_all(iro_header_bytes.as_ref())?;
