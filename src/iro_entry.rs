@@ -1,4 +1,4 @@
-const INDEX_FIXED_BYTE_SIZE: usize = 20;
+pub const INDEX_FIXED_BYTE_SIZE: usize = 20;
 
 pub struct IroEntry {
     path: Vec<u8>,

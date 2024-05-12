@@ -9,7 +9,7 @@ use std::{
 };
 
 use clap::{Args, Parser, Subcommand};
-use iro_entry::{FileFlags, IroEntry};
+use iro_entry::{FileFlags, IroEntry, INDEX_FIXED_BYTE_SIZE};
 use iro_header::{IroFlags, IroHeader, IroVersion};
 use thiserror::Error;
 use walkdir::{DirEntry, WalkDir};
@@ -118,7 +118,7 @@ fn pack_archive(dir_to_pack: PathBuf, output_path: Option<PathBuf>) -> Result<Pa
     for entry in &entries {
         let unicode_filepath: Vec<u8> =
             unicode_filepath_bytes(entry.path(), dir_to_pack.as_path())?;
-        offset += unicode_filepath.len() as u64 + 16 + 4 // 16 + 4 is indexing entry size
+        offset += (unicode_filepath.len() + INDEX_FIXED_BYTE_SIZE) as u64;
     }
     mod_file.seek(std::io::SeekFrom::Start(offset))?;
 
