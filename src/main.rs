@@ -1,3 +1,6 @@
+mod iro_entry;
+mod iro_header;
+
 use std::{
     io::{BufRead, BufReader, Seek, Write},
     path::{Path, PathBuf},
@@ -6,11 +9,10 @@ use std::{
 };
 
 use clap::{Args, Parser, Subcommand};
+use iro_entry::{FileFlags, IroEntry};
 use iro_header::{IroFlags, IroHeader, IroVersion};
 use thiserror::Error;
 use walkdir::{DirEntry, WalkDir};
-
-mod iro_header;
 
 /// Command line tool to pack a single directory into a single archive in IRO format
 #[derive(Parser)]
@@ -120,7 +122,7 @@ fn pack_archive(dir_to_pack: PathBuf, output_path: Option<PathBuf>) -> Result<Pa
     }
     mod_file.seek(std::io::SeekFrom::Start(offset))?;
 
-    let mut positions: Vec<(u64, i32)> = Vec::with_capacity(entries.len());
+    let mut iro_entries: Vec<IroEntry> = Vec::with_capacity(entries.len());
     for entry in &entries {
         let file = std::fs::File::open(entry.to_owned().into_path())?;
         let entry_offset = offset;
@@ -135,21 +137,18 @@ fn pack_archive(dir_to_pack: PathBuf, output_path: Option<PathBuf>) -> Result<Pa
             reader.consume(consumed);
             offset += consumed as u64;
         }
-        positions.push((entry_offset, (offset - entry_offset) as i32));
+        iro_entries.push(IroEntry::new(
+            unicode_filepath_bytes(entry.path(), dir_to_pack.as_path())?,
+            FileFlags::Uncompressed,
+            entry_offset,
+            (offset - entry_offset) as u32,
+        ));
     }
 
     // indexing data
     mod_file.seek(std::io::SeekFrom::Start(iro_header_size))?;
-    for (entry, (pos, size)) in entries.iter().zip(positions) {
-        let unicode_filepath: Vec<u8> =
-            unicode_filepath_bytes(entry.path(), dir_to_pack.as_path())?;
-        let len: u16 = unicode_filepath.len() as u16 + 4 + 16;
-        mod_file.write_all(&len.to_le_bytes())?;
-        mod_file.write_all(&(unicode_filepath.len().to_owned() as u16).to_le_bytes())?;
-        mod_file.write_all(&unicode_filepath)?;
-        mod_file.write_all(&0i32.to_le_bytes())?;
-        mod_file.write_all(&pos.to_le_bytes())?;
-        mod_file.write_all(&size.to_le_bytes())?;
+    for entry in iro_entries {
+        mod_file.write_all(&Vec::from(entry))?;
     }
 
     Ok(output_path)
