@@ -110,7 +110,7 @@ fn pack_archive(dir_to_pack: PathBuf, output_path: Option<PathBuf>) -> Result<Pa
 
     // IRO Header
     let iro_header = IroHeader::new(IroVersion::Two, IroFlags::None, 16, entries.len() as u32);
-    let iro_header_bytes = Vec::from(iro_header.clone());
+    let iro_header_bytes = Vec::from(iro_header);
     let iro_header_size = iro_header_bytes.len() as u64;
     mod_file.write_all(iro_header_bytes.as_ref())?;
 
