@@ -69,7 +69,7 @@ pub enum Error {
     CannotDetectDefaultName(PathBuf),
     #[error("parsing error due to invalid iro flags {0}")]
     InvalidIroFlags(i32),
-    #[error(transparent)]
+    #[error("failed to parse binary data")]
     NomParseError(nom::Err<::nom::error::Error<Vec<u8>>>),
     #[error("parsing error due to invalid file flags {0}")]
     InvalidFileFlags(i32),
@@ -212,7 +212,6 @@ fn unpack_archive(iro_path: PathBuf, output_path: Option<PathBuf>) -> Result<Pat
     if std::fs::read_dir(&output_path).is_ok() {
         return Err(Error::OutputPathExists(output_path));
     }
-    std::fs::create_dir_all(&output_path)?;
 
     let iro_file = std::fs::File::open(&iro_path)?;
     let mut buf_reader = BufReader::new(&iro_file);
