@@ -3,7 +3,7 @@ mod iro_header;
 mod iro_parser;
 
 use std::{
-    io::{BufRead, BufReader, Cursor, Read, Seek, Write},
+    io::{BufRead, BufReader, Read, Seek, Write},
     path::{Path, PathBuf},
     process,
     result::Result,
@@ -103,10 +103,10 @@ fn main() {
             }
         },
         Commands::Unpack(args) => match unpack_archive(args.iro_path, args.output) {
-            Ok(output_dir) => { 
+            Ok(output_dir) => {
                 println!("iro unpacked into \"{}\" directory", output_dir.display());
                 process::exit(0);
-            },
+            }
             Err(err) => {
                 let stderr = std::io::stderr();
                 writeln!(stderr.lock(), "[iroga error]: {}", err).ok();
@@ -236,7 +236,11 @@ fn unpack_archive(iro_path: PathBuf, output_path: Option<PathBuf>) -> Result<Pat
     for iro_entry in iro_entries {
         let iro_path = parse_utf16(&iro_entry.path)?;
         let iro_path = output_path.join(iro_path);
-        std::fs::create_dir_all(iro_path.parent().ok_or(Error::ParentPathDoesNotExist(iro_path.clone()))?)?;
+        std::fs::create_dir_all(
+            iro_path
+                .parent()
+                .ok_or(Error::ParentPathDoesNotExist(iro_path.clone()))?,
+        )?;
         let mut entry_file = std::fs::File::create(&iro_path).unwrap();
 
         let mut buf_reader = BufReader::new(&iro_file);
@@ -255,9 +259,10 @@ fn parse_utf16(path_bytes: &[u8]) -> Result<String, Error> {
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| Error::Utf16Error("uneven bytes".to_owned()))?;
 
-    String::from_utf16(&bytes_u16).map_err(|_| Error::Utf16Error("path_bytes in u16 cannot be converted to string".to_owned()))
+    String::from_utf16(&bytes_u16).map_err(|_| {
+        Error::Utf16Error("path_bytes in u16 cannot be converted to string".to_owned())
+    })
 }
-
 
 fn unicode_filepath_bytes(path: &Path, strip_prefix_str: &Path) -> Result<Vec<u8>, Error> {
     Ok(path
