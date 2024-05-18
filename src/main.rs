@@ -220,13 +220,16 @@ fn unpack_archive(iro_path: PathBuf, output_path: Option<PathBuf>) -> Result<Pat
     let consumed_bytes_len = bytes.len() - rem_bytes.len();
     buf_reader.consume(consumed_bytes_len);
 
-    println!("{:?}", iro_header);
+    println!("IRO metadata");
+    println!("> version: {}", iro_header.version);
+    println!("> type: {}", iro_header.flags);
+    println!("> number of files: {}", iro_header.num_files);
+    println!();
 
     let mut iro_entries: Vec<IroEntry> = Vec::new();
     for _ in 0..iro_header.num_files {
         let bytes = buf_reader.fill_buf()?;
         let (rem_bytes, iro_entry) = parse_iro_entry_v2(bytes)?;
-        println!("{:?}", iro_entry);
 
         iro_entries.push(iro_entry);
         let consumed_bytes_len = bytes.len() - rem_bytes.len();
@@ -234,34 +237,35 @@ fn unpack_archive(iro_path: PathBuf, output_path: Option<PathBuf>) -> Result<Pat
     }
 
     for iro_entry in iro_entries {
-        let iro_path = parse_utf16(&iro_entry.path)?.replace('\\', "/");
-        let iro_path = output_path.join(iro_path);
+        let iro_entry_path = parse_utf16(&iro_entry.path)?.replace('\\', "/");
+        let entry_path = output_path.join(&iro_entry_path);
         std::fs::create_dir_all(
-            iro_path
+            entry_path
                 .parent()
-                .ok_or(Error::ParentPathDoesNotExist(iro_path.clone()))?,
+                .ok_or(Error::ParentPathDoesNotExist(entry_path.clone()))?,
         )?;
-        let mut entry_file = std::fs::File::create(&iro_path).unwrap();
+        let mut entry_file = std::fs::File::create(&entry_path).unwrap();
 
         let mut buf_reader = BufReader::new(&iro_file);
         buf_reader.seek(std::io::SeekFrom::Start(iro_entry.offset))?;
         let mut entry_buffer = buf_reader.take(iro_entry.data_len as u64);
         std::io::copy(&mut entry_buffer, &mut entry_file)?;
+
+        println!("\"{}\" file written!", iro_entry_path);
     }
 
     Ok(output_path)
 }
 
-fn parse_utf16(path_bytes: &[u8]) -> Result<String, Error> {
-    let bytes_u16 = path_bytes
+fn parse_utf16(bytes: &[u8]) -> Result<String, Error> {
+    let bytes_u16 = bytes
         .chunks(2)
         .map(|e| e.try_into().map(u16::from_le_bytes))
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| Error::Utf16Error("uneven bytes".to_owned()))?;
 
-    String::from_utf16(&bytes_u16).map_err(|_| {
-        Error::Utf16Error("path_bytes in u16 cannot be converted to string".to_owned())
-    })
+    String::from_utf16(&bytes_u16)
+        .map_err(|_| Error::Utf16Error("bytes in u16 cannot be converted to string".to_owned()))
 }
 
 fn unicode_filepath_bytes(path: &Path, strip_prefix_str: &Path) -> Result<Vec<u8>, Error> {

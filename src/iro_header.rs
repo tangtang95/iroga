@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::Error;
 
 pub const IRO_SIG: i32 = 0x534f5249; // represents IROS text
@@ -55,8 +57,25 @@ impl TryFrom<i32> for IroFlags {
         match value {
             0 => Ok(IroFlags::None),
             1 => Ok(IroFlags::Patch),
-            _ => Err(Error::InvalidIroFlags(value))
+            _ => Err(Error::InvalidIroFlags(value)),
         }
     }
 }
 
+impl Display for IroFlags {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IroFlags::None => f.write_str("Full IRO"),
+            IroFlags::Patch => f.write_str("Patch IRO"),
+        }
+    }
+}
+
+impl Display for IroVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IroVersion::Zero => f.write_str("0x10000"),
+            IroVersion::Two => f.write_str("0x10002"),
+        }
+    }
+}
