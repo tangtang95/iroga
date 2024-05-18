@@ -1,6 +1,6 @@
 use nom::{
-    bytes::streaming::{tag, take},
-    number::streaming::{le_i32, le_u16, le_u32, le_u64},
+    bytes::complete::{tag, take},
+    number::complete::{le_i32, le_u16, le_u32, le_u64},
 };
 
 use crate::{
@@ -22,8 +22,8 @@ pub fn parse_iro_header_v2(bytes: &[u8]) -> Result<(&[u8], IroHeader), Error> {
     ))
 }
 
+/// Parse IroEntry without considering length of entire block
 pub fn parse_iro_entry_v2(bytes: &[u8]) -> Result<(&[u8], IroEntry), Error> {
-    let (bytes, _) = le_u16(bytes)?;
     let (bytes, filepath_len) = le_u16(bytes)?;
     let (bytes, filepath) = take(filepath_len)(bytes)?;
     let (bytes, file_flags) = le_i32(bytes)?;

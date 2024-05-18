@@ -182,12 +182,10 @@ fn unpack_archive(iro_path: PathBuf, output_path: Option<PathBuf>) -> Result<Pat
         return Err(Error::OutputPathExists(output_path));
     }
 
-    let iro_file = std::fs::File::open(&iro_path)?;
-    let mut buf_reader = BufReader::new(&iro_file);
-    let bytes = buf_reader.fill_buf()?;
-    let (rem_bytes, iro_header) = parse_iro_header_v2(bytes)?;
-    let consumed_bytes_len = bytes.len() - rem_bytes.len();
-    buf_reader.consume(consumed_bytes_len);
+    let mut iro_file = std::fs::File::open(&iro_path)?;
+    let mut iro_header_bytes = [0u8; 20];
+    iro_file.read_exact(&mut iro_header_bytes)?;
+    let (_, iro_header) = parse_iro_header_v2(&iro_header_bytes)?;
 
     println!("IRO metadata");
     println!("- version: {}", iro_header.version);
@@ -197,12 +195,18 @@ fn unpack_archive(iro_path: PathBuf, output_path: Option<PathBuf>) -> Result<Pat
 
     let mut iro_entries: Vec<IroEntry> = Vec::new();
     for _ in 0..iro_header.num_files {
-        let bytes = buf_reader.fill_buf()?;
-        let (rem_bytes, iro_entry) = parse_iro_entry_v2(bytes)?;
+        let mut entry_len_bytes = [0u8; 2];
+        iro_file.read_exact(&mut entry_len_bytes)?;
+        let entry_len = u16::from_le_bytes(entry_len_bytes);
+        println!("{}", entry_len);
+
+        let mut entry_bytes = vec![0u8; entry_len as usize - 2];
+        iro_file.read_exact(entry_bytes.as_mut())?;
+        println!("{:?}", entry_bytes);
+
+        let (_, iro_entry) = parse_iro_entry_v2(&entry_bytes)?;
 
         iro_entries.push(iro_entry);
-        let consumed_bytes_len = bytes.len() - rem_bytes.len();
-        buf_reader.consume(consumed_bytes_len);
     }
 
     for iro_entry in iro_entries {

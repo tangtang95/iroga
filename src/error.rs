@@ -19,7 +19,8 @@ pub enum Error {
     CannotDetectDefaultName(PathBuf),
     #[error("parsing error due to invalid iro flags {0}")]
     InvalidIroFlags(i32),
-    #[error("failed to parse binary data")]
+    // #[error("failed to parse binary data")]
+    #[error(transparent)]
     CannotParseBinary(nom::Err<::nom::error::Error<Vec<u8>>>),
     #[error("parsing error due to invalid file flags {0}")]
     InvalidFileFlags(i32),
