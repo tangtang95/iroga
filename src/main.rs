@@ -234,7 +234,7 @@ fn unpack_archive(iro_path: PathBuf, output_path: Option<PathBuf>) -> Result<Pat
     }
 
     for iro_entry in iro_entries {
-        let iro_path = parse_utf16(&iro_entry.path)?;
+        let iro_path = parse_utf16(&iro_entry.path)?.replace('\\', "/");
         let iro_path = output_path.join(iro_path);
         std::fs::create_dir_all(
             iro_path
