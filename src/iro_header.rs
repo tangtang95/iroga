@@ -1,21 +1,23 @@
-const IRO_SIG: i32 = 0x534f5249; // represents IROS text
+use crate::Error;
 
-#[derive(Clone)]
+pub const IRO_SIG: i32 = 0x534f5249; // represents IROS text
+
+#[derive(Clone, Debug)]
 pub struct IroHeader {
-    version: IroVersion,
-    flags: IroFlags,
-    size: i32,
-    num_files: u32,
+    pub version: IroVersion,
+    pub flags: IroFlags,
+    pub size: i32,
+    pub num_files: u32,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 #[allow(dead_code)]
 pub enum IroFlags {
     None = 0,
     Patch = 1,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 #[allow(dead_code)]
 pub enum IroVersion {
     Zero = 0x10000,
@@ -45,3 +47,16 @@ impl From<IroHeader> for Vec<u8> {
         .concat()
     }
 }
+
+impl TryFrom<i32> for IroFlags {
+    type Error = Error;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(IroFlags::None),
+            1 => Ok(IroFlags::Patch),
+            _ => Err(Error::InvalidIroFlags(value))
+        }
+    }
+}
+
