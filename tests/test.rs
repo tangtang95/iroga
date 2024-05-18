@@ -6,7 +6,7 @@ use assert_fs::{
 use hex_literal::hex;
 
 #[test]
-pub fn not_exists_file() {
+pub fn pack_not_exists_file() {
     let dir = assert_fs::TempDir::new().unwrap();
     iroga_cmd()
         .current_dir(dir.path())
@@ -19,7 +19,7 @@ pub fn not_exists_file() {
 }
 
 #[test]
-pub fn not_dir() {
+pub fn pack_not_dir() {
     let dir = assert_fs::TempDir::new().unwrap();
     dir.child("not_dir").touch().unwrap();
     iroga_cmd()
@@ -32,7 +32,7 @@ pub fn not_dir() {
 }
 
 #[test]
-pub fn output_file_already_exists() {
+pub fn pack_output_file_already_exists() {
     let dir = assert_fs::TempDir::new().unwrap();
     dir.child("dir/file.txt").touch().unwrap();
     dir.child("dir.iro").touch().unwrap();
@@ -101,6 +101,47 @@ pub fn pack_multiple_files() {
     assert!(dir.child("multiple.iro").exists());
     dir.child("multiple.iro").assert(EXPECTED_BYTES);
     dir.close().unwrap();
+}
+
+#[test]
+pub fn unpack_not_exists_file() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    iroga_cmd()
+        .current_dir(dir.path())
+        .arg("unpack")
+        .arg(dir.path().join("not_exists_file.iro"))
+        .assert()
+        .failure()
+        .code(1);
+    assert!(!dir.child("not_exists_file.iro").exists());
+}
+
+#[test]
+pub fn unpack_not_file() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    dir.child("not_file/is_file").touch().unwrap();
+    iroga_cmd()
+        .arg("unpack")
+        .arg(dir.path().join("not_file"))
+        .assert()
+        .failure()
+        .code(1);
+    assert!(dir.child("not_file").is_dir());
+}
+
+#[test]
+pub fn unpack_output_path_already_exists() {
+    let dir = assert_fs::TempDir::new().unwrap();
+    dir.child("dir/file.txt").touch().unwrap();
+    dir.child("dir.iro").touch().unwrap();
+    iroga_cmd()
+        .current_dir(dir.path())
+        .arg("unpack")
+        .arg("dir.iro")
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicates::str::contains("output path already exists"));
 }
 
 #[test]
