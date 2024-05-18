@@ -1,17 +1,20 @@
 mod iro_entry;
 mod iro_header;
+mod iro_parser;
+mod error;
 
 use std::{
-    io::{BufRead, BufReader, Seek, Write},
+    io::{BufRead, BufReader, Read, Seek, Write},
     path::{Path, PathBuf},
     process,
     result::Result,
 };
 
 use clap::{Args, Parser, Subcommand};
+use error::Error;
 use iro_entry::{FileFlags, IroEntry, INDEX_FIXED_BYTE_SIZE};
 use iro_header::{IroFlags, IroHeader, IroVersion};
-use thiserror::Error;
+use iro_parser::{parse_iro_entry_v2, parse_iro_header_v2};
 use walkdir::{DirEntry, WalkDir};
 
 /// Command line tool to pack a single directory into a single archive in IRO format
@@ -26,6 +29,7 @@ struct Cli {
 enum Commands {
     /// Pack a single directory into an IRO archive
     Pack(PackArgs),
+    Unpack(UnpackArgs),
 }
 
 #[derive(Args)]
@@ -39,20 +43,15 @@ struct PackArgs {
     output: Option<PathBuf>,
 }
 
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error(transparent)]
-    Io(#[from] ::std::io::Error),
-    #[error(transparent)]
-    StripPrefix(#[from] ::std::path::StripPrefixError),
-    #[error("{0} is not a directory")]
-    NotDir(PathBuf),
-    #[error("output file path already exists: {0}")]
-    OutputPathExists(PathBuf),
-    #[error("{0} has invalid unicode")]
-    InvalidUnicode(PathBuf),
-    #[error("could not find default name from {0}")]
-    CannotDetectDefaultName(PathBuf),
+#[derive(Args)]
+struct UnpackArgs {
+    /// IRO file to unpack
+    #[arg()]
+    iro_path: PathBuf,
+
+    /// Output directory path (default is the name of the IRO to unpack)
+    #[arg(short, long)]
+    output: Option<PathBuf>,
 }
 
 fn main() {
@@ -64,6 +63,17 @@ fn main() {
                     "archive \"{}\" has been created!",
                     output_filename.display()
                 );
+                process::exit(0);
+            }
+            Err(err) => {
+                let stderr = std::io::stderr();
+                writeln!(stderr.lock(), "[iroga error]: {}", err).ok();
+                process::exit(1);
+            }
+        },
+        Commands::Unpack(args) => match unpack_archive(args.iro_path, args.output) {
+            Ok(output_dir) => {
+                println!("IRO unpacked into \"{}\" directory", output_dir.display());
                 process::exit(0);
             }
             Err(err) => {
@@ -152,6 +162,83 @@ fn pack_archive(dir_to_pack: PathBuf, output_path: Option<PathBuf>) -> Result<Pa
     }
 
     Ok(output_path)
+}
+
+fn unpack_archive(iro_path: PathBuf, output_path: Option<PathBuf>) -> Result<PathBuf, Error> {
+    // compute output filepath: either default generated name or given output_path
+    let output_path = match output_path {
+        Some(path) => path,
+        None => {
+            let filename = iro_path
+                .file_name()
+                .ok_or(Error::CannotDetectDefaultName(iro_path.clone()))?
+                .to_str()
+                .ok_or(Error::CannotDetectDefaultName(iro_path.clone()))?
+                .trim_end_matches(".iro");
+            Path::new(filename).to_owned()
+        }
+    };
+    if std::fs::read_dir(&output_path).is_ok() {
+        return Err(Error::OutputPathExists(output_path));
+    }
+
+    let mut iro_file = std::fs::File::open(&iro_path)?;
+    let mut iro_header_bytes = [0u8; 20];
+    iro_file.read_exact(&mut iro_header_bytes)?;
+    let (_, iro_header) = parse_iro_header_v2(&iro_header_bytes)?;
+
+    println!("IRO metadata");
+    println!("- version: {}", iro_header.version);
+    println!("- type: {}", iro_header.flags);
+    println!("- number of files: {}", iro_header.num_files);
+    println!();
+
+    let mut iro_entries: Vec<IroEntry> = Vec::new();
+    for _ in 0..iro_header.num_files {
+        let mut entry_len_bytes = [0u8; 2];
+        iro_file.read_exact(&mut entry_len_bytes)?;
+        let entry_len = u16::from_le_bytes(entry_len_bytes);
+        println!("{}", entry_len);
+
+        let mut entry_bytes = vec![0u8; entry_len as usize - 2];
+        iro_file.read_exact(entry_bytes.as_mut())?;
+        println!("{:?}", entry_bytes);
+
+        let (_, iro_entry) = parse_iro_entry_v2(&entry_bytes)?;
+
+        iro_entries.push(iro_entry);
+    }
+
+    for iro_entry in iro_entries {
+        let iro_entry_path = parse_utf16(&iro_entry.path)?.replace('\\', "/");
+        let entry_path = output_path.join(&iro_entry_path);
+        std::fs::create_dir_all(
+            entry_path
+                .parent()
+                .ok_or(Error::ParentPathDoesNotExist(entry_path.clone()))?,
+        )?;
+        let mut entry_file = std::fs::File::create(&entry_path).unwrap();
+
+        let mut buf_reader = BufReader::new(&iro_file);
+        buf_reader.seek(std::io::SeekFrom::Start(iro_entry.offset))?;
+        let mut entry_buffer = buf_reader.take(iro_entry.data_len as u64);
+        std::io::copy(&mut entry_buffer, &mut entry_file)?;
+
+        println!("\"{}\" file written!", iro_entry_path);
+    }
+
+    Ok(output_path)
+}
+
+fn parse_utf16(bytes: &[u8]) -> Result<String, Error> {
+    let bytes_u16 = bytes
+        .chunks(2)
+        .map(|e| e.try_into().map(u16::from_le_bytes))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| Error::InvalidUtf16("uneven bytes".to_owned()))?;
+
+    String::from_utf16(&bytes_u16)
+        .map_err(|_| Error::InvalidUtf16("bytes in u16 cannot be converted to string".to_owned()))
 }
 
 fn unicode_filepath_bytes(path: &Path, strip_prefix_str: &Path) -> Result<Vec<u8>, Error> {

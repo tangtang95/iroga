@@ -1,12 +1,16 @@
+use crate::Error;
+
 pub const INDEX_FIXED_BYTE_SIZE: usize = 20;
 
+#[derive(Debug)]
 pub struct IroEntry {
-    path: Vec<u8>,
-    flags: FileFlags,
-    offset: u64,
-    data_len: u32,
+    pub path: Vec<u8>,
+    pub flags: FileFlags,
+    pub offset: u64,
+    pub data_len: u32,
 }
 
+#[derive(Debug)]
 pub enum FileFlags {
     Uncompressed = 0,
 }
@@ -32,5 +36,16 @@ impl From<IroEntry> for Vec<u8> {
         bytes.extend(value.offset.to_le_bytes());
         bytes.extend(value.data_len.to_le_bytes());
         bytes
+    }
+}
+
+impl TryFrom<i32> for FileFlags {
+    type Error = Error;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(FileFlags::Uncompressed),
+            _ => Err(Error::InvalidFileFlags(value))
+        }
     }
 }
