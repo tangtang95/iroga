@@ -3,7 +3,7 @@ mod iro_header;
 mod iro_parser;
 
 use std::{
-    io::{BufRead, BufReader, Seek, Write},
+    io::{BufRead, BufReader, Cursor, Read, Seek, Write},
     path::{Path, PathBuf},
     process,
     result::Result,
@@ -73,6 +73,8 @@ pub enum Error {
     NomParseError(nom::Err<::nom::error::Error<Vec<u8>>>),
     #[error("parsing error due to invalid file flags {0}")]
     InvalidFileFlags(i32),
+    #[error("utf16 error {0}")]
+    Utf16Error(String),
 }
 
 impl From<nom::Err<nom::error::Error<&[u8]>>> for Error {
@@ -208,7 +210,7 @@ fn unpack_archive(iro_path: PathBuf, output_path: Option<PathBuf>) -> Result<Pat
     std::fs::create_dir_all(&output_path)?;
 
     let iro_file = std::fs::File::open(&iro_path)?;
-    let mut buf_reader = BufReader::new(iro_file);
+    let mut buf_reader = BufReader::new(&iro_file);
     let bytes = buf_reader.fill_buf()?;
     let (rem_bytes, iro_header) = parse_iro_header_v2(bytes)?;
     let consumed_bytes_len = bytes.len() - rem_bytes.len();
@@ -227,7 +229,28 @@ fn unpack_archive(iro_path: PathBuf, output_path: Option<PathBuf>) -> Result<Pat
         buf_reader.consume(consumed_bytes_len);
     }
 
+    for iro_entry in iro_entries {
+        let iro_path = parse_utf16(&iro_entry.path)?;
+        let iro_path = output_path.join(iro_path);
+        let mut entry_file = std::fs::File::create(output_path.join(iro_path))?;
+
+        let mut buf_reader = BufReader::new(&iro_file);
+        buf_reader.seek(std::io::SeekFrom::Start(iro_entry.offset))?;
+        let mut entry_buffer = buf_reader.take(iro_entry.data_len as u64);
+        std::io::copy(&mut entry_buffer, &mut entry_file)?;
+    }
+
     Ok(output_path)
+}
+
+fn parse_utf16(path_bytes: &[u8]) -> Result<String, Error> {
+    let bytes_u16 = path_bytes
+        .chunks(2)
+        .map(|e| e.try_into().map(u16::from_be_bytes))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| Error::Utf16Error("uneven bytes".to_owned()))?;
+
+    String::from_utf16(&bytes_u16).map_err(|_| Error::Utf16Error("path_bytes in u16 cannot be converted to string".to_owned()))
 }
 
 
