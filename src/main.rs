@@ -1,6 +1,7 @@
 mod iro_entry;
 mod iro_header;
 mod iro_parser;
+mod error;
 
 use std::{
     io::{BufRead, BufReader, Read, Seek, Write},
@@ -10,10 +11,10 @@ use std::{
 };
 
 use clap::{Args, Parser, Subcommand};
+use error::Error;
 use iro_entry::{FileFlags, IroEntry, INDEX_FIXED_BYTE_SIZE};
 use iro_header::{IroFlags, IroHeader, IroVersion};
 use iro_parser::{parse_iro_entry_v2, parse_iro_header_v2};
-use thiserror::Error;
 use walkdir::{DirEntry, WalkDir};
 
 /// Command line tool to pack a single directory into a single archive in IRO format
@@ -53,38 +54,6 @@ struct UnpackArgs {
     output: Option<PathBuf>,
 }
 
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error(transparent)]
-    Io(#[from] ::std::io::Error),
-    #[error(transparent)]
-    StripPrefix(#[from] ::std::path::StripPrefixError),
-    #[error("{0} is not a directory")]
-    NotDir(PathBuf),
-    #[error("output path already exists: {0}")]
-    OutputPathExists(PathBuf),
-    #[error("{0} has invalid unicode")]
-    InvalidUnicode(PathBuf),
-    #[error("could not find default name from {0}")]
-    CannotDetectDefaultName(PathBuf),
-    #[error("parsing error due to invalid iro flags {0}")]
-    InvalidIroFlags(i32),
-    #[error("failed to parse binary data")]
-    NomParseError(nom::Err<::nom::error::Error<Vec<u8>>>),
-    #[error("parsing error due to invalid file flags {0}")]
-    InvalidFileFlags(i32),
-    #[error("utf16 error {0}")]
-    Utf16Error(String),
-    #[error("parten file path does not exists: {0}")]
-    ParentPathDoesNotExist(PathBuf),
-}
-
-impl From<nom::Err<nom::error::Error<&[u8]>>> for Error {
-    fn from(err: nom::Err<nom::error::Error<&[u8]>>) -> Self {
-        Self::NomParseError(err.map_input(|input| input.into()))
-    }
-}
-
 fn main() {
     let cli = Cli::parse();
     match cli.command {
@@ -104,7 +73,7 @@ fn main() {
         },
         Commands::Unpack(args) => match unpack_archive(args.iro_path, args.output) {
             Ok(output_dir) => {
-                println!("iro unpacked into \"{}\" directory", output_dir.display());
+                println!("IRO unpacked into \"{}\" directory", output_dir.display());
                 process::exit(0);
             }
             Err(err) => {
@@ -221,9 +190,9 @@ fn unpack_archive(iro_path: PathBuf, output_path: Option<PathBuf>) -> Result<Pat
     buf_reader.consume(consumed_bytes_len);
 
     println!("IRO metadata");
-    println!("> version: {}", iro_header.version);
-    println!("> type: {}", iro_header.flags);
-    println!("> number of files: {}", iro_header.num_files);
+    println!("- version: {}", iro_header.version);
+    println!("- type: {}", iro_header.flags);
+    println!("- number of files: {}", iro_header.num_files);
     println!();
 
     let mut iro_entries: Vec<IroEntry> = Vec::new();
@@ -262,10 +231,10 @@ fn parse_utf16(bytes: &[u8]) -> Result<String, Error> {
         .chunks(2)
         .map(|e| e.try_into().map(u16::from_le_bytes))
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| Error::Utf16Error("uneven bytes".to_owned()))?;
+        .map_err(|_| Error::InvalidUtf16("uneven bytes".to_owned()))?;
 
     String::from_utf16(&bytes_u16)
-        .map_err(|_| Error::Utf16Error("bytes in u16 cannot be converted to string".to_owned()))
+        .map_err(|_| Error::InvalidUtf16("bytes in u16 cannot be converted to string".to_owned()))
 }
 
 fn unicode_filepath_bytes(path: &Path, strip_prefix_str: &Path) -> Result<Vec<u8>, Error> {
