@@ -61,7 +61,7 @@ pub enum Error {
     StripPrefix(#[from] ::std::path::StripPrefixError),
     #[error("{0} is not a directory")]
     NotDir(PathBuf),
-    #[error("output file path already exists: {0}")]
+    #[error("output path already exists: {0}")]
     OutputPathExists(PathBuf),
     #[error("{0} has invalid unicode")]
     InvalidUnicode(PathBuf),
@@ -75,6 +75,8 @@ pub enum Error {
     InvalidFileFlags(i32),
     #[error("utf16 error {0}")]
     Utf16Error(String),
+    #[error("parten file path does not exists: {0}")]
+    ParentPathDoesNotExist(PathBuf),
 }
 
 impl From<nom::Err<nom::error::Error<&[u8]>>> for Error {
@@ -207,6 +209,9 @@ fn unpack_archive(iro_path: PathBuf, output_path: Option<PathBuf>) -> Result<Pat
             Path::new(filename).to_owned()
         }
     };
+    if std::fs::read_dir(&output_path).is_ok() {
+        return Err(Error::OutputPathExists(output_path));
+    }
     std::fs::create_dir_all(&output_path)?;
 
     let iro_file = std::fs::File::open(&iro_path)?;
@@ -232,7 +237,8 @@ fn unpack_archive(iro_path: PathBuf, output_path: Option<PathBuf>) -> Result<Pat
     for iro_entry in iro_entries {
         let iro_path = parse_utf16(&iro_entry.path)?;
         let iro_path = output_path.join(iro_path);
-        let mut entry_file = std::fs::File::create(output_path.join(iro_path))?;
+        std::fs::create_dir_all(iro_path.parent().ok_or(Error::ParentPathDoesNotExist(iro_path.clone()))?)?;
+        let mut entry_file = std::fs::File::create(&iro_path).unwrap();
 
         let mut buf_reader = BufReader::new(&iro_file);
         buf_reader.seek(std::io::SeekFrom::Start(iro_entry.offset))?;
@@ -246,7 +252,7 @@ fn unpack_archive(iro_path: PathBuf, output_path: Option<PathBuf>) -> Result<Pat
 fn parse_utf16(path_bytes: &[u8]) -> Result<String, Error> {
     let bytes_u16 = path_bytes
         .chunks(2)
-        .map(|e| e.try_into().map(u16::from_be_bytes))
+        .map(|e| e.try_into().map(u16::from_le_bytes))
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| Error::Utf16Error("uneven bytes".to_owned()))?;
 
