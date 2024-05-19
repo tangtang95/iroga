@@ -12,17 +12,18 @@ pub struct IroHeader {
     pub num_files: u32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 #[allow(dead_code)]
 pub enum IroFlags {
     None = 0,
     Patch = 1,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 #[allow(dead_code)]
 pub enum IroVersion {
     Zero = 0x10000,
+    One = 0x10001,
     Two = 0x10002,
 }
 
@@ -75,7 +76,21 @@ impl Display for IroVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             IroVersion::Zero => f.write_str("0x10000"),
+            IroVersion::One => f.write_str("0x10001"),
             IroVersion::Two => f.write_str("0x10002"),
+        }
+    }
+}
+
+impl TryFrom<i32> for IroVersion {
+    type Error = Error;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        match value {
+            0x10000 => Ok(IroVersion::Zero),
+            0x10001 => Ok(IroVersion::One),
+            0x10002 => Ok(IroVersion::Two),
+            _ => Err(Error::InvalidIroVersion(value)),
         }
     }
 }

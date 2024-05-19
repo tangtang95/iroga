@@ -11,14 +11,14 @@ use crate::{
 
 pub fn parse_iro_header_v2(bytes: &[u8]) -> Result<(&[u8], IroHeader), Error> {
     let (bytes, _) = tag(&IRO_SIG.to_le_bytes())(bytes)?;
-    let (bytes, _) = tag((IroVersion::Two as i32).to_le_bytes())(bytes)?;
+    let (bytes, version) = le_i32(bytes)?;
     let (bytes, flags) = le_i32(bytes)?;
     let (bytes, _) = tag(16i32.to_le_bytes())(bytes)?;
     let (bytes, num_files) = le_u32(bytes)?;
 
     Ok((
         bytes,
-        IroHeader::new(IroVersion::Two, IroFlags::try_from(flags)?, 16, num_files),
+        IroHeader::new(IroVersion::try_from(version)?, IroFlags::try_from(flags)?, 16, num_files),
     ))
 }
 

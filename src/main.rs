@@ -193,6 +193,14 @@ fn unpack_archive(iro_path: PathBuf, output_path: Option<PathBuf>) -> Result<Pat
     println!("- number of files: {}", iro_header.num_files);
     println!();
 
+    // IRO validation
+    if iro_header.version != IroVersion::Two {
+        return Err(Error::UnsupportedIroVersion(iro_header.version));
+    }
+    if iro_header.flags != IroFlags::None {
+        return Err(Error::UnsupportedIroFlags(iro_header.flags));
+    }
+
     let mut iro_entries: Vec<IroEntry> = Vec::new();
     for _ in 0..iro_header.num_files {
         let mut entry_len_bytes = [0u8; 2];

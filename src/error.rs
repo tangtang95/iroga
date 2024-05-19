@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
+use crate::iro_header::{IroFlags, IroVersion};
+
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -19,15 +21,20 @@ pub enum Error {
     CannotDetectDefaultName(PathBuf),
     #[error("parsing error due to invalid iro flags {0}")]
     InvalidIroFlags(i32),
-    // #[error("failed to parse binary data")]
-    #[error(transparent)]
+    #[error("parsing error due to invalid iro version {0}")]
+    InvalidIroVersion(i32),
+    #[error("failed to parse binary data")]
     CannotParseBinary(nom::Err<::nom::error::Error<Vec<u8>>>),
     #[error("parsing error due to invalid file flags {0}")]
     InvalidFileFlags(i32),
     #[error("invalid utf16 {0}")]
     InvalidUtf16(String),
-    #[error("parten file path does not exists: {0}")]
+    #[error("parent file path does not exists: {0}")]
     ParentPathDoesNotExist(PathBuf),
+    #[error("unsupporter iro version {0}")]
+    UnsupportedIroVersion(IroVersion),
+    #[error("unsupporter iro flags {0}")]
+    UnsupportedIroFlags(IroFlags),
 }
 
 impl From<nom::Err<nom::error::Error<&[u8]>>> for Error {
