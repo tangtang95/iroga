@@ -198,11 +198,9 @@ fn unpack_archive(iro_path: PathBuf, output_path: Option<PathBuf>) -> Result<Pat
         let mut entry_len_bytes = [0u8; 2];
         iro_file.read_exact(&mut entry_len_bytes)?;
         let entry_len = u16::from_le_bytes(entry_len_bytes);
-        println!("{}", entry_len);
 
         let mut entry_bytes = vec![0u8; entry_len as usize - 2];
         iro_file.read_exact(entry_bytes.as_mut())?;
-        println!("{:?}", entry_bytes);
 
         let (_, iro_entry) = parse_iro_entry_v2(&entry_bytes)?;
 
