@@ -295,7 +295,7 @@ dependencies = [
 
 [[package]]
 name = "iroga"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "assert_cmd",
  "assert_fs",
