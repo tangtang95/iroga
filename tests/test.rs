@@ -202,6 +202,90 @@ pub fn unpack_multiple_files() {
     dir.close().unwrap();
 }
 
+#[test]
+pub fn unpack_lzss_compressed() {
+    let iro_bytes: &[u8] = &hex!(
+        "49 52 4f 53 02 00 01 00   00 00 00 00 10 00 00 00"
+        "01 00 00 00 24 00 10 00   66 00 69 00 6c 00 65 00"
+        "2e 00 74 00 78 00 74 00   01 00 00 00 38 00 00 00"
+        "00 00 00 00 2D 00 00 00   FF 3C 3F 78 6D 6C 20 76"
+        "65 FF 72 73 69 6F 6E 3D   22 31 FF 2E 30 22 20 65"
+        "6E 63 6F FF 64 69 6E 67   3D 22 75 74 FF 66 2D 38"
+        "22 3F 3E 0D 0A                                   "
+    );
+    let dir = assert_fs::TempDir::new().unwrap();
+    dir.child("lzss_compressed.iro")
+        .write_binary(iro_bytes)
+        .unwrap();
+
+    iroga_cmd()
+        .current_dir(dir.path())
+        .arg("unpack")
+        .arg(dir.path().join("lzss_compressed.iro"))
+        .assert()
+        .success()
+        .code(0);
+
+    assert!(dir.child("lzss_compressed/file.txt").exists());
+    dir.child("lzss_compressed/file.txt").assert("<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n");
+    dir.close().unwrap();
+}
+
+#[test]
+pub fn unpack_lzma_compressed() {
+    let iro_bytes: &[u8] = &hex!(
+        "49 52 4f 53 02 00 01 00   00 00 00 00 10 00 00 00"
+        "01 00 00 00 24 00 10 00   66 00 69 00 6c 00 65 00"
+        "2e 00 74 00 78 00 74 00   02 00 00 00 38 00 00 00"
+        "00 00 00 00 28 00 00 00   2E 00 00 00 05 00 00 00"
+        "5D 00 00 10 00 00 24 19   49 98 6F 10 11 C8 5F E6"
+        "D5 8A 64 78 4D FA BB C3   D4 DE 60 B7 5A 52 38 00"
+    );
+    let dir = assert_fs::TempDir::new().unwrap();
+    dir.child("lzma_compressed.iro")
+        .write_binary(iro_bytes)
+        .unwrap();
+
+    iroga_cmd()
+        .current_dir(dir.path())
+        .arg("unpack")
+        .arg(dir.path().join("lzma_compressed.iro"))
+        .assert()
+        .success()
+        .code(0);
+
+    assert!(dir.child("lzma_compressed/file.txt").exists());
+    dir.child("lzma_compressed/file.txt").assert("Hello World!\r\n\r\nHi!\r\n\r\nHello World!\r\n\r\nHi!\r\n\r\n");
+    dir.close().unwrap();
+}
+
+#[test]
+pub fn unpack_version_0() {
+    let iro_bytes: &[u8] = &hex!(
+        "49 52 4f 53 00 00 01 00   00 00 00 00 10 00 00 00"
+        "01 00 00 00 20 00 10 00   66 00 69 00 6c 00 65 00"
+        "2e 00 74 00 78 00 74 00   00 00 00 00 34 00 00 00"
+        "17 00 00 00 48 65 6c 6c   6f 20 57 6f 72 6c 64 21"
+        "0d 0a 0d 0a 48 69 21 0d   0a 0d 0a               "
+    );
+    let dir = assert_fs::TempDir::new().unwrap();
+    dir.child("version_0.iro")
+        .write_binary(iro_bytes)
+        .unwrap();
+
+    iroga_cmd()
+        .current_dir(dir.path())
+        .arg("unpack")
+        .arg(dir.path().join("version_0.iro"))
+        .assert()
+        .success()
+        .code(0);
+
+    assert!(dir.child("version_0/file.txt").exists());
+    dir.child("version_0/file.txt").assert("Hello World!\r\n\r\nHi!\r\n\r\n");
+    dir.close().unwrap();
+}
+
 fn iroga_cmd() -> Command {
     Command::cargo_bin("iroga").unwrap()
 }

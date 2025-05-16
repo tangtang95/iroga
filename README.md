@@ -43,8 +43,8 @@ Section repeated for each file inside the archive
 | 0x00 | 2 | Length of this section (`filepath_length + 20`) |
 | 0x02 | 2 | Length of the file path |
 | 0x04 | L | File path in unicode UTF16 |
-| 0x04 + L  | 4 | File flags (`0`: Non-compressed, other unimplemented) |
-| 0x04 + L + 0x04 | 8 | IRO archive offset pointing to the related file in data section |
+| 0x04 + L  | 4 | File flags (`0`: Non-compressed, `1`: LZSS-compressed, `2`: LZMA-compressed) |
+| 0x04 + L + 0x04 | 8 | IRO archive offset pointing to the related file in data section (Size=4 on version 0x10000) |
 | 0x04 + L + 0x0C | 4 | Length of the data |
 
 ### Data section

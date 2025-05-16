@@ -13,6 +13,8 @@ pub struct IroEntry {
 #[derive(Debug)]
 pub enum FileFlags {
     Uncompressed = 0,
+    LzssCompressed = 1,
+    LzmaCompressed = 2,
 }
 
 impl IroEntry {
@@ -45,7 +47,9 @@ impl TryFrom<i32> for FileFlags {
     fn try_from(value: i32) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(FileFlags::Uncompressed),
-            _ => Err(Error::InvalidFileFlags(value))
+            1 => Ok(FileFlags::LzssCompressed),
+            2 => Ok(FileFlags::LzmaCompressed),
+            _ => Err(Error::InvalidFileFlags(value)),
         }
     }
 }

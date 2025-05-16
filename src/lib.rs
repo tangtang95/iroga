@@ -1,3 +1,4 @@
+mod compression;
 mod iro_entry;
 mod iro_header;
 mod iro_parser;
@@ -123,14 +124,6 @@ pub fn unpack_archive(iro_path: PathBuf, output_path: Option<PathBuf>) -> Result
     println!("- number of files: {}", iro_header.num_files);
     println!();
 
-    // IRO validation
-    if iro_header.version != IroVersion::Two {
-        return Err(Error::UnsupportedIroVersion(iro_header.version));
-    }
-    if iro_header.flags != IroFlags::None {
-        return Err(Error::UnsupportedIroFlags(iro_header.flags));
-    }
-
     let mut iro_entries: Vec<IroEntry> = Vec::new();
     for _ in 0..iro_header.num_files {
         let mut entry_len_bytes = [0u8; 2];
@@ -140,7 +133,7 @@ pub fn unpack_archive(iro_path: PathBuf, output_path: Option<PathBuf>) -> Result
         let mut entry_bytes = vec![0u8; entry_len as usize - 2];
         iro_file.read_exact(entry_bytes.as_mut())?;
 
-        let (_, iro_entry) = parse_iro_entry_v2(&entry_bytes)?;
+        let (_, iro_entry) = parse_iro_entry_v2(&iro_header, &entry_bytes)?;
 
         iro_entries.push(iro_entry);
     }
@@ -158,7 +151,17 @@ pub fn unpack_archive(iro_path: PathBuf, output_path: Option<PathBuf>) -> Result
         let mut buf_reader = BufReader::new(&iro_file);
         buf_reader.seek(std::io::SeekFrom::Start(iro_entry.offset))?;
         let mut entry_buffer = buf_reader.take(iro_entry.data_len as u64);
-        std::io::copy(&mut entry_buffer, &mut entry_file)?;
+        match iro_entry.flags {
+            FileFlags::LzssCompressed => {
+                compression::lzss_decompress(&mut entry_buffer, &mut entry_file)?
+            }
+            FileFlags::LzmaCompressed => {
+                compression::lzma_decompress(&mut entry_buffer, &mut entry_file)?
+            }
+            _ => {
+                std::io::copy(&mut entry_buffer, &mut entry_file)?;
+            }
+        }
 
         println!("\"{}\" file written!", iro_entry_path);
     }
