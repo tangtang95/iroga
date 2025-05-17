@@ -18,6 +18,7 @@ walkdir = "2.5.0"
 nom = "8.0.0"
 lzs = { version = "0.1.1", default-features = false, features = ["std"] }
 lzma-rs = "0.3.0"
+fast-glob = "0.4.5"
 
 [dev-dependencies]
 assert_cmd = "2.0.16"

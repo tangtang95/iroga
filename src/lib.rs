@@ -1,8 +1,8 @@
 mod compression;
+mod error;
 mod iro_entry;
 mod iro_header;
 mod iro_parser;
-mod error;
 
 use std::{
     io::{BufRead, BufReader, Read, Seek, Write},
@@ -11,12 +11,36 @@ use std::{
 };
 
 use error::Error;
-use iro_entry::{FileFlags, IroEntry, INDEX_FIXED_BYTE_SIZE};
+use iro_entry::{FileFlags, INDEX_FIXED_BYTE_SIZE, IroEntry};
 use iro_header::{IroFlags, IroHeader, IroVersion};
 use iro_parser::{parse_iro_entry_v2, parse_iro_header_v2};
 use walkdir::{DirEntry, WalkDir};
 
-pub fn pack_archive(dir_to_pack: PathBuf, output_path: Option<PathBuf>) -> Result<PathBuf, Error> {
+fn glob_includes(files: &[String], entry_path: impl AsRef<[u8]>) -> bool {
+    files.iter().any(|f| fast_glob::glob_match(f, &entry_path))
+}
+
+fn match_entry_path(
+    entry_path: impl AsRef<[u8]>,
+    include_files: &Option<Vec<String>>,
+    exclude_files: &Option<Vec<String>>,
+) -> bool {
+    match (include_files, exclude_files) {
+        (None, None) => true,
+        (Some(includes), None) => glob_includes(includes, &entry_path),
+        (None, Some(excludes)) => !glob_includes(excludes, &entry_path),
+        (Some(includes), Some(excludes)) => {
+            glob_includes(includes, &entry_path) && !glob_includes(excludes, &entry_path)
+        }
+    }
+}
+
+pub fn pack_archive(
+    dir_to_pack: PathBuf,
+    output_path: Option<PathBuf>,
+    include_files: Option<Vec<String>>,
+    exclude_files: Option<Vec<String>>,
+) -> Result<PathBuf, Error> {
     let dir_metadata = std::fs::metadata(&dir_to_pack)?;
     if !dir_metadata.is_dir() {
         return Err(Error::NotDir(dir_to_pack));
@@ -46,6 +70,15 @@ pub fn pack_archive(dir_to_pack: PathBuf, output_path: Option<PathBuf>) -> Resul
         .into_iter()
         .filter_map(Result::ok)
         .filter(|e| !e.file_type().is_dir())
+        .filter(|e| {
+            let relative_path = e
+                .path()
+                .strip_prefix(dir_to_pack.as_path())
+                .unwrap()
+                .display()
+                .to_string();
+            match_entry_path(relative_path, &include_files, &exclude_files)
+        })
         .collect();
     let mut mod_file = std::fs::File::create(&output_path)?;
 
@@ -95,7 +128,12 @@ pub fn pack_archive(dir_to_pack: PathBuf, output_path: Option<PathBuf>) -> Resul
     Ok(output_path)
 }
 
-pub fn unpack_archive(iro_path: PathBuf, output_path: Option<PathBuf>) -> Result<PathBuf, Error> {
+pub fn unpack_archive(
+    iro_path: PathBuf,
+    output_path: Option<PathBuf>,
+    include_files: Option<Vec<String>>,
+    exclude_files: Option<Vec<String>>,
+) -> Result<PathBuf, Error> {
     // compute output filepath: either default generated name or given output_path
     let output_path = match output_path {
         Some(path) => path,
@@ -140,6 +178,11 @@ pub fn unpack_archive(iro_path: PathBuf, output_path: Option<PathBuf>) -> Result
 
     for iro_entry in iro_entries {
         let iro_entry_path = parse_utf16(&iro_entry.path)?.replace('\\', "/");
+
+        if !match_entry_path(&iro_entry_path, &include_files, &exclude_files) {
+            continue;
+        }
+
         let entry_path = output_path.join(&iro_entry_path);
         std::fs::create_dir_all(
             entry_path
