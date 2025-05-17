@@ -2,8 +2,6 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
-use crate::iro_header::{IroFlags, IroVersion};
-
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -31,10 +29,6 @@ pub enum Error {
     InvalidUtf16(String),
     #[error("parent file path does not exists: {0}")]
     ParentPathDoesNotExist(PathBuf),
-    #[error("unsupporter iro version {0}")]
-    UnsupportedIroVersion(IroVersion),
-    #[error("unsupporter iro flags {0}")]
-    UnsupportedIroFlags(IroFlags),
 }
 
 impl From<nom::Err<nom::error::Error<&[u8]>>> for Error {
