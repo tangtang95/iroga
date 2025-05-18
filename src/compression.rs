@@ -1,12 +1,12 @@
+use lzma_rs::error::Error as LzmaError;
 use lzs::{Lzs, LzsError};
 use nom::number::complete::le_i32;
-use lzma_rs::error::Error as LzmaError;
 
 use crate::Error;
 
 pub fn lzss_decompress<R: std::io::Read, W: std::io::Write>(
     mut reader: R,
-    mut writer: W
+    mut writer: W,
 ) -> Result<(), Error> {
     match Lzs::new(0x00).decompress(
         lzs::IOSimpleReader::new(&mut reader),
@@ -20,7 +20,7 @@ pub fn lzss_decompress<R: std::io::Read, W: std::io::Write>(
 
 pub fn lzma_decompress<R: std::io::Read, W: std::io::Write>(
     mut reader: R,
-    mut writer: W
+    mut writer: W,
 ) -> Result<(), Error> {
     let mut header_bytes = [0u8; 8];
     reader.read_exact(&mut header_bytes)?;
@@ -40,12 +40,8 @@ pub fn lzma_decompress<R: std::io::Read, W: std::io::Write>(
     } {
         Err(LzmaError::IoError(e)) => Err(Error::Io(e)),
         Err(LzmaError::HeaderTooShort(e)) => Err(Error::Io(e)),
-        Err(LzmaError::LzmaError(s)) => {
-            Err(Error::Io(std::io::Error::new(std::io::ErrorKind::Other, s)))
-        },
-        Err(LzmaError::XzError(s)) => {
-            Err(Error::Io(std::io::Error::new(std::io::ErrorKind::Other, s)))
-        },
+        Err(LzmaError::LzmaError(s)) => Err(Error::Io(std::io::Error::other(s))),
+        Err(LzmaError::XzError(s)) => Err(Error::Io(std::io::Error::other(s))),
         Ok(()) => Ok(()),
     }
 }

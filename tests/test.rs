@@ -3,6 +3,7 @@ use assert_fs::{
     assert::PathAssert,
     fixture::{FileTouch, FileWriteBin, FileWriteStr, PathChild},
 };
+use predicates::prelude::predicate;
 use hex_literal::hex;
 
 #[test]
@@ -104,6 +105,38 @@ pub fn pack_multiple_files() {
 }
 
 #[test]
+pub fn pack_specific_files() {
+    const EXPECTED_BYTES: &[u8] = &hex!(
+        "49 52 4f 53 02 00 01 00   00 00 00 00 10 00 00 00"
+        "02 00 00 00 1e 00 0a 00   62 00 2e 00 74 00 78 00"
+        "74 00 00 00 00 00 58 00   00 00 00 00 00 00 01 00"
+        "00 00 26 00 12 00 64 00   69 00 72 00 5c 00 63 00"
+        "2e 00 74 00 78 00 74 00   00 00 00 00 59 00 00 00"
+        "00 00 00 00 01 00 00 00   42 43                  "
+    );
+    let dir = assert_fs::TempDir::new().unwrap();
+    dir.child("specific/a.txt").write_str("A").unwrap();
+    dir.child("specific/b.txt").write_str("B").unwrap();
+    dir.child("specific/dir/c.txt").write_str("C").unwrap();
+
+    iroga_cmd()
+        .current_dir(dir.path())
+        .arg("pack")
+        .arg("--include")
+        .arg("b.txt")
+        .arg("--include")
+        .arg("*/c.txt")
+        .arg(dir.path().join("specific"))
+        .assert()
+        .success()
+        .code(0);
+
+    assert!(dir.child("specific.iro").exists());
+    dir.child("specific.iro").assert(EXPECTED_BYTES);
+    dir.close().unwrap();
+}
+
+#[test]
 pub fn unpack_not_exists_file() {
     let dir = assert_fs::TempDir::new().unwrap();
     iroga_cmd()
@@ -199,6 +232,74 @@ pub fn unpack_multiple_files() {
     dir.child("multiple/a.txt").assert("A");
     dir.child("multiple/b.txt").assert("B");
     dir.child("multiple/dir/c.txt").assert("C");
+    dir.close().unwrap();
+}
+
+#[test]
+pub fn unpack_specific_files() {
+    let iro_bytes: &[u8] = &hex!(
+        "49 52 4f 53 02 00 01 00   00 00 00 00 10 00 00 00"
+        "03 00 00 00 1e 00 0a 00   61 00 2e 00 74 00 78 00"
+        "74 00 00 00 00 00 76 00   00 00 00 00 00 00 01 00"
+        "00 00 1e 00 0a 00 62 00   2e 00 74 00 78 00 74 00"
+        "00 00 00 00 77 00 00 00   00 00 00 00 01 00 00 00"
+        "26 00 12 00 64 00 69 00   72 00 5c 00 63 00 2e 00"
+        "74 00 78 00 74 00 00 00   00 00 78 00 00 00 00 00"
+        "00 00 01 00 00 00 41 42   43                     "
+    );
+    let dir = assert_fs::TempDir::new().unwrap();
+    dir.child("specific.iro")
+        .write_binary(iro_bytes)
+        .unwrap();
+
+    iroga_cmd()
+        .current_dir(dir.path())
+        .arg("unpack")
+        .arg("--include")
+        .arg("b.txt")
+        .arg("--include")
+        .arg("*/c.txt")
+        .arg(dir.path().join("specific.iro"))
+        .assert()
+        .success()
+        .code(0);
+
+    dir.child("specific/a.txt").assert(predicate::path::missing());
+    dir.child("specific/b.txt").assert("B");
+    dir.child("specific/dir/c.txt").assert("C");
+    dir.close().unwrap();
+}
+
+#[test]
+pub fn unpack_omit_files() {
+    let iro_bytes: &[u8] = &hex!(
+        "49 52 4f 53 02 00 01 00   00 00 00 00 10 00 00 00"
+        "03 00 00 00 1e 00 0a 00   61 00 2e 00 74 00 78 00"
+        "74 00 00 00 00 00 76 00   00 00 00 00 00 00 01 00"
+        "00 00 1e 00 0a 00 62 00   2e 00 74 00 78 00 74 00"
+        "00 00 00 00 77 00 00 00   00 00 00 00 01 00 00 00"
+        "26 00 12 00 64 00 69 00   72 00 5c 00 63 00 2e 00"
+        "74 00 78 00 74 00 00 00   00 00 78 00 00 00 00 00"
+        "00 00 01 00 00 00 41 42   43                     "
+    );
+    let dir = assert_fs::TempDir::new().unwrap();
+    dir.child("omit.iro")
+        .write_binary(iro_bytes)
+        .unwrap();
+
+    iroga_cmd()
+        .current_dir(dir.path())
+        .arg("unpack")
+        .arg("--exclude")
+        .arg("b.txt")
+        .arg(dir.path().join("omit.iro"))
+        .assert()
+        .success()
+        .code(0);
+
+    dir.child("omit/a.txt").assert("A");
+    dir.child("omit/b.txt").assert(predicate::path::missing());
+    dir.child("omit/dir/c.txt").assert("C");
     dir.close().unwrap();
 }
 
