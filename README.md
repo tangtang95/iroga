@@ -4,7 +4,7 @@
 Command line application to pack a single directory into an IRO archive.
 The IRO archive is a format used in [7th heaven](https://github.com/tsunamods-codes/7th-Heaven), a FF7 mod manager application
 
-## Usage
+## CLI Usage
 
 ```sh
 # Simple usage
@@ -12,6 +12,26 @@ iroga pack <DIR>
 
 # For help information
 iroga --help
+```
+
+## Lib Usage
+
+```rust
+use iroga::error::Error;
+use iroga::iro_archive::IroArchive;
+use std::fs::File;
+use std::io::BufWriter;
+use std::path::Path;
+
+let iro_file = File::open(Path::new("foobar.iro"))?;
+let mut iro_archive = IroArchive::open(iro_file);
+let iro_header = iro_archive.read_header()?;
+let iro_entries = iro_archive.read_iro_entries(&iro_header)?;
+
+for iro_entry in iro_entries {
+    let mut buf_writer = BufWriter::new(Vec::new());
+    iro_archive.seek_and_read_file_entry(&iro_entry, &mut buf_writer)?;
+}
 ```
 
 ## IRO format
