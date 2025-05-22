@@ -1,19 +1,20 @@
 mod compression;
-mod error;
+pub mod error;
+pub mod iro_archive;
 mod iro_entry;
 mod iro_header;
 mod iro_parser;
 
 use std::{
-    io::{BufRead, BufReader, Read, Seek, Write},
+    io::{BufRead, BufReader, Seek, Write},
     path::{Path, PathBuf},
     result::Result,
 };
 
 use error::Error;
+use iro_archive::IroArchive;
 use iro_entry::{FileFlags, INDEX_FIXED_BYTE_SIZE, IroEntry};
 use iro_header::{IroFlags, IroHeader, IroVersion};
-use iro_parser::{parse_iro_entry_v2, parse_iro_header_v2};
 use walkdir::{DirEntry, WalkDir};
 
 fn glob_includes(files: &[String], entry_path: impl AsRef<[u8]>) -> bool {
@@ -151,10 +152,10 @@ pub fn unpack_archive(
         return Err(Error::OutputPathExists(output_path));
     }
 
-    let mut iro_file = std::fs::File::open(&iro_path)?;
-    let mut iro_header_bytes = [0u8; 20];
-    iro_file.read_exact(&mut iro_header_bytes)?;
-    let (_, iro_header) = parse_iro_header_v2(&iro_header_bytes)?;
+    let iro_file = std::fs::File::open(&iro_path)?;
+
+    let mut iro_archive = IroArchive::open(iro_file);
+    let iro_header = iro_archive.read_header()?;
 
     println!("IRO metadata");
     println!("- version: {}", iro_header.version);
@@ -162,19 +163,7 @@ pub fn unpack_archive(
     println!("- number of files: {}", iro_header.num_files);
     println!();
 
-    let mut iro_entries: Vec<IroEntry> = Vec::new();
-    for _ in 0..iro_header.num_files {
-        let mut entry_len_bytes = [0u8; 2];
-        iro_file.read_exact(&mut entry_len_bytes)?;
-        let entry_len = u16::from_le_bytes(entry_len_bytes);
-
-        let mut entry_bytes = vec![0u8; entry_len as usize - 2];
-        iro_file.read_exact(entry_bytes.as_mut())?;
-
-        let (_, iro_entry) = parse_iro_entry_v2(&iro_header, &entry_bytes)?;
-
-        iro_entries.push(iro_entry);
-    }
+    let iro_entries = iro_archive.read_iro_entries(&iro_header)?;
 
     for iro_entry in iro_entries {
         let iro_entry_path = parse_utf16(&iro_entry.path)?.replace('\\', "/");
@@ -191,20 +180,7 @@ pub fn unpack_archive(
         )?;
         let mut entry_file = std::fs::File::create(&entry_path).unwrap();
 
-        let mut buf_reader = BufReader::new(&iro_file);
-        buf_reader.seek(std::io::SeekFrom::Start(iro_entry.offset))?;
-        let mut entry_buffer = buf_reader.take(iro_entry.data_len as u64);
-        match iro_entry.flags {
-            FileFlags::LzssCompressed => {
-                compression::lzss_decompress(&mut entry_buffer, &mut entry_file)?
-            }
-            FileFlags::LzmaCompressed => {
-                compression::lzma_decompress(&mut entry_buffer, &mut entry_file)?
-            }
-            _ => {
-                std::io::copy(&mut entry_buffer, &mut entry_file)?;
-            }
-        }
+        iro_archive.seek_and_read_file_entry(&iro_entry, &mut entry_file)?;
 
         println!("\"{}\" file written!", iro_entry_path);
     }
