@@ -5,8 +5,9 @@ use std::{
 
 use crate::Error;
 use crate::compression;
-use crate::iro_entry::{FileFlags, IroEntry};
-use crate::iro_header::IroHeader;
+use crate::iro_entry::FileFlags;
+pub use crate::iro_entry::IroEntry;
+pub use crate::iro_header::IroHeader;
 use crate::iro_parser::{parse_iro_entry_v2, parse_iro_header_v2};
 
 pub struct IroArchive<RW> {
